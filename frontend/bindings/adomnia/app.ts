@@ -285,6 +285,10 @@ export function SaveSettings(settingsJSON: string): $CancellablePromise<void> {
     return $Call.ByID(1949631069, settingsJSON);
 }
 
+export function SelectExtensionArchive(): $CancellablePromise<string> {
+    return $Call.ByID(2224333856);
+}
+
 export function SelectFolder(title: string): $CancellablePromise<string> {
     return $Call.ByID(237181597, title);
 }

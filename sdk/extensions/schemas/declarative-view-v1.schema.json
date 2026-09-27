@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adomnia.local/schemas/declarative-view-v1.json",
+  "title": "adOmnia Declarative View State v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind"],
+  "properties": {
+    "kind": { "enum": ["empty", "list", "tree", "table", "form", "details", "markdown", "json"] },
+    "title": { "type": "string" },
+    "message": { "type": "string" },
+    "columns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "title"],
+        "properties": { "key": { "type": "string" }, "title": { "type": "string" } }
+      }
+    },
+    "rows": { "type": "array", "items": { "type": "object" } },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "badge": { "type": "string" },
+          "parentId": { "type": "string" }
+        }
+      }
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "type": { "enum": ["text", "number", "boolean", "select"] },
+          "value": true,
+          "placeholder": { "type": "string" },
+          "options": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "command"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "command": { "type": "string" }
+        }
+      }
+    },
+    "data": true
+  }
+}

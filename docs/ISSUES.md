@@ -15,8 +15,24 @@ This file contains only work that is still open. Completed items are archived in
 
 ## Open Queue
 
-_No verified-open issues. The previously-listed backlog items were re-checked against
-the current codebase on 2026-06-13 and found already resolved (see below)._
+### Extension Platform v2 — planned (P1 strategic initiative)
+
+Architecture and phased implementation plan: [EXTENSION-PLATFORM-PLAN.md](EXTENSION-PLATFORM-PLAN.md).
+The target is a local-first extension system with VS Code-like contribution breadth,
+a fault-isolated JavaScript/TypeScript host, declarative and isolated custom UI,
+and a Pi-inspired Markdown SDK that coding agents can use to author extensions.
+This plan describes future behavior; the feature catalog remains the source of truth
+for what the current plugin runtime actually ships.
+
+- [x] Target architecture, trust model, package format, Agent Skill layout, v1 compatibility, and release gates documented.
+- [x] Foundation slice: strict manifest v2 contract, JSON Schema, secure package inspection, deterministic packaging, embedded/exportable Markdown SDK, Agent Skill, templates, and JSON-capable `extension init/check/pack/sdk` CLI.
+- [ ] Phase 0: approve the preview contracts, complete event semantics, permission decisions, and threat-model review.
+- [ ] Phase 1: finish package installation/registry, trust and grant persistence, engine compatibility, embedded TypeScript build, and Extensions UI.
+- [ ] Phase 2: out-of-process extension host with activation, async APIs, cancellation, and recovery.
+- [ ] Phase 3: command/menu/keybinding/settings/status contribution infrastructure.
+- [ ] Phase 4: native declarative views and isolated custom webviews.
+- [ ] Phase 5: adOmnia domain APIs and extension points.
+- [ ] Phase 6: legacy adapter, hardening, cross-platform verification, and general availability.
 
 ### a0: Bug Hunt — campagna implementata, rifinitura aperta
 

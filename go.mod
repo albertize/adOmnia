@@ -70,6 +70,7 @@ require (
 	github.com/digitorus/timestamp v0.0.0-20250524132541-c45532741eea // indirect
 	github.com/dlclark/regexp2/v2 v2.8.0 // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
+	github.com/evanw/esbuild v0.27.3 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect

@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 16px; background: #17191f; color: #e8eaf0; }
+    button { border: 0; border-radius: 6px; padding: 8px 12px; background: #7367f0; color: white; cursor: pointer; }
+    pre { white-space: pre-wrap; color: #aeb4c2; }
+  </style>
+</head>
+<body>
+  <h2>{{NAME}}</h2>
+  <p>This UI is isolated from the adOmnia renderer and Wails bindings.</p>
+  <button id="ping">Run extension command</button>
+  <pre id="result"></pre>
+  <script>
+    document.querySelector('#ping').addEventListener('click', async () => {
+      const result = await window.adomnia.executeCommand('{{ID}}.ping', {})
+      document.querySelector('#result').textContent = JSON.stringify(result, null, 2)
+    })
+  </script>
+</body>
+</html>

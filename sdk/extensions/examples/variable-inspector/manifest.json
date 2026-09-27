@@ -1,0 +1,19 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.variable-inspector-example",
+  "name": "Variable Inspector Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Shows active environment variables after explicit permission review.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onCommand:adomnia.variable-inspector-example.inspect", "onView:adomnia.variable-inspector-example.variables"],
+  "permissions": ["variables.read"],
+  "contributes": {
+    "commands": [{ "id": "adomnia.variable-inspector-example.inspect", "title": "Inspect active variables", "category": "Examples" }],
+    "views": [{ "id": "adomnia.variable-inspector-example.variables", "container": "extensions", "name": "Variables", "renderer": "declarative" }]
+  }
+}

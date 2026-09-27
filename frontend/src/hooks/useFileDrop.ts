@@ -12,6 +12,8 @@ import { parseInteropFile } from '@/lib/interopHub'
 import { saveFlowDefinitions } from '@/lib/flowStorage'
 import { safeSetItem } from '@/lib/safeLocalStorage'
 import { shouldHandleGlobalDrop } from '@/lib/dropOwnership'
+import { installExtensionArchive, notifyExtensionWorkbenchEvent } from '@/lib/extensions-v2-api'
+import { useExtensionsStore } from '@/stores/extensions'
 import type { Tab } from '@/lib/types'
 
 export interface DropFeedback {
@@ -80,6 +82,7 @@ function describeDropFile(name: string): DropPreview {
   if (lower.endsWith('.sql')) return { name, kind: 'SQL', target: 'Database Studio', supported: true }
   if (lower.endsWith('.class')) return { name, kind: 'Java Class', target: 'Class File Inspector', supported: true }
   if (lower === 'env.yaml') return { name, kind: 'Environment YAML', target: 'Environments', supported: true }
+  if (lower.endsWith('.adomnia-extension')) return { name, kind: 'Extension package', target: 'Extensions', supported: true }
   if (lower.endsWith('.adomnia')) return { name, kind: 'Workspace', target: 'Collections', supported: true }
   if (/\.(json|ya?ml|bru)$/i.test(lower)) return { name, kind: 'Collection', target: 'Collections', supported: true }
   return { name, kind: 'Unknown', target: 'Unsupported file', supported: false }
@@ -201,6 +204,7 @@ export function useFileDrop(): FileDropResult {
               totalEnvironments > 0 ? `${totalEnvironments} environment${totalEnvironments > 1 ? 's' : ''}` : '',
             ].filter(Boolean).join(', ') + ' imported'
         showFeedback(`${label} successfully.`, true)
+        void notifyExtensionWorkbenchEvent('onImport', { collections: totalImported, environments: totalEnvironments, workspace: workspaceImported }).catch(() => undefined)
       } else { showFeedback(errors[0] ?? 'Import failed.', false) }
     }
   }, [importCollection, setActiveRail, showFeedback])
@@ -213,13 +217,22 @@ export function useFileDrop(): FileDropResult {
     try {
       const raw = await ReadDroppedFiles(paths)
       const entries = JSON.parse(raw) as DroppedFileData[]
+      const extensionPackages = entries.filter((entry) => entry.name.toLowerCase().endsWith('.adomnia-extension'))
+      if (extensionPackages.length > 0) {
+        if (entries.length !== 1) throw new Error('Install extension packages one at a time.')
+        await installExtensionArchive(extensionPackages[0].path)
+        await useExtensionsStore.getState().load()
+        setActiveRail('plugins')
+        showFeedback(`${extensionPackages[0].name} installed disabled. Review permissions before enabling it.`, true)
+        return
+      }
       const files = entries.map(fileFromDroppedData)
       if (!files.length) { showFeedback('No file detected.', false); return }
       await importDroppedFiles(files)
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : 'Drop import failed.', false)
     }
-  }, [clearNoFileTimer, importDroppedFiles, showFeedback])
+  }, [clearNoFileTimer, importDroppedFiles, setActiveRail, showFeedback])
 
   // Native OS file drops. Wails 3 replaced the v2 `runtime.OnFileDrop` callback
   // with the `common:WindowFilesDropped` event, and only delivers it when the

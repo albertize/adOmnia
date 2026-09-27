@@ -14,6 +14,7 @@ import { ResizeHandle } from '@/components/ui/ResizeHandle'
 import { DropOverlay } from '@/components/layout/DropOverlay'
 import { DropToast } from '@/components/layout/DropToast'
 import { PluginNotificationToast } from '@/components/plugins/PluginNotificationToast'
+import { ExtensionContributionHost } from '@/components/plugins/ExtensionContributionHost'
 import { AICompanion } from '@/components/assistant/AICompanion'
 import { useAppStore } from '@/stores/app'
 import { useAppInit } from '@/hooks/useAppInit'
@@ -25,6 +26,9 @@ import { useUiTranslation } from '@/lib/uiI18n'
 import { useWorkspaceHydration, useWorkspaceHydrationShell } from '@/hooks/useWorkspaceHydration'
 import { markStartup, reportStartupPerformance } from '@/lib/startupPerformance'
 import { useDevLogsStore } from '@/stores/devLogs'
+import { useExtensionsStore } from '@/stores/extensions'
+import { useCollectionsStore } from '@/stores/collections'
+import { setExtensionWorkspaceContext } from '@/lib/extensions-v2-api'
 import { RecordStartupPerformance } from '@/wailsjs/go/main/App'
 import { saveWorkspaceStartupHint } from '@/lib/startupHints'
 import { findSpatialFocusIndex, focusableElements, ownsArrowKey } from '@/lib/accessibility'
@@ -58,6 +62,7 @@ function App() {
   const workspaceHydrated = useWorkspaceHydration()
   const workspaceShellPhase = useWorkspaceHydrationShell(workspaceHydrated)
   const addDevLog = useDevLogsStore((s) => s.addEntry)
+  const activeWorkspaceId = useCollectionsStore((s) => s.activeWorkspaceId)
   useAppearance()
   useKeyboardShortcuts({ setCommandPaletteOpen })
 
@@ -69,7 +74,13 @@ function App() {
 
   useEffect(() => {
     markStartup('startup:react-mounted')
+    void useExtensionsStore.getState().load()
   }, [])
+
+  useEffect(() => {
+    if (!workspaceHydrated || !activeWorkspaceId) return
+    void setExtensionWorkspaceContext(activeWorkspaceId)
+  }, [activeWorkspaceId, workspaceHydrated])
 
   useEffect(() => {
     const open = () => setBugHuntOpen(true)
@@ -192,6 +203,7 @@ function App() {
           {dragOver && <DropOverlay preview={dropPreview} />}
           {dropFeedback && <DropToast feedback={dropFeedback} />}
           <PluginNotificationToast />
+          <ExtensionContributionHost />
           <AICompanion />
           {bugHuntOpen && <Suspense fallback={<div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#070817] text-white">{tr('Loading Bug Hunt…')}</div>}><BugHuntOverlay onClose={() => setBugHuntOpen(false)} /></Suspense>}
         </div>

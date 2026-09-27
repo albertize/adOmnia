@@ -28,6 +28,8 @@ import { appendMockEndpoints, createMockEndpointFromRequest } from '@/lib/mockEn
 import { DropToast } from '@/components/layout/DropToast'
 import type { DropFeedback } from '@/hooks/useFileDrop'
 import { requestWithUrlInput, resolvedRequestUrl } from '@/lib/requestUrl'
+import { notifyExtensionWorkbenchEvent } from '@/lib/extensions-v2-api'
+import { ExtensionToolbarActions } from '@/components/plugins/ExtensionToolbarActions'
 import { useNavigationTranslation, useUiTranslation } from '@/lib/uiI18n'
 import { DetachRequest, DetachRequestAndResponse } from '@/wailsjs/go/main/App'
 import { EventsOn } from '@/wailsjs/runtime/runtime'
@@ -316,6 +318,7 @@ function ActiveRequestBar({
   recording,
   recordingCount,
   onToggleRecording,
+  extensionActions,
 }: {
   request: RequestItem
   isDirty: boolean
@@ -332,6 +335,7 @@ function ActiveRequestBar({
   recording: boolean
   recordingCount: number
   onToggleRecording: () => void
+  extensionActions?: React.ReactNode
 }) {
   const tr = useUiTranslation()
   const [savedFlash, setSavedFlash] = useState(false)
@@ -408,6 +412,8 @@ function ActiveRequestBar({
         >
           {savedFlash ? <Check size={15} /> : <Save size={15} />}
         </button>
+
+        {extensionActions}
 
         <button
           onClick={onDelete}
@@ -784,6 +790,7 @@ export function RequestWorkspace({ standaloneTabId, standalonePane }: RequestWor
     if (!tab || !tab.collectionId) return
     updateCollectionRequest(tab.collectionId, tab.request)
     markClean(tab.id)
+    void notifyExtensionWorkbenchEvent('onSave', { tabId: tab.id, collectionId: tab.collectionId, requestId: tab.request.id }).catch(() => undefined)
   }, [tabs, updateCollectionRequest, markClean])
 
   const handleRenameTab = useCallback((tabId: string, name: string) => {
@@ -801,6 +808,7 @@ export function RequestWorkspace({ standaloneTabId, standalonePane }: RequestWor
     if (!activeTab || !activeTab.collectionId) return
     updateCollectionRequest(activeTab.collectionId, activeTab.request)
     markClean(activeTab.id)
+    void notifyExtensionWorkbenchEvent('onSave', { tabId: activeTab.id, collectionId: activeTab.collectionId, requestId: activeTab.request.id }).catch(() => undefined)
   }
 
   const confirmDeleteActiveRequest = () => {
@@ -950,6 +958,11 @@ export function RequestWorkspace({ standaloneTabId, standalonePane }: RequestWor
           recording={recording}
           recordingCount={recordedCalls.length}
           onToggleRecording={requestStopRecording}
+          extensionActions={<ExtensionToolbarActions
+            location="request/toolbar"
+            context={{ activeTool: 'request', hasResponse: Boolean(activeTab.response), 'response.status': activeTab.response?.status, 'response.contentType': activeTab.response?.contentType }}
+            args={{ tabId: activeTab.id, requestId: activeTab.request.id }}
+          />}
         />
       )}
       {showRequestPane && <ApiToolsBar
@@ -992,6 +1005,11 @@ export function RequestWorkspace({ standaloneTabId, standalonePane }: RequestWor
 			  oaPath={oaPath}
 			  oaMethod={oaMethod}
 			  assertions={activeTab.request.assertions}
+              headerActions={<ExtensionToolbarActions
+                location="response/toolbar"
+                context={{ activeTool: 'request', hasResponse: Boolean(activeTab.response), 'response.status': activeTab.response?.status, 'response.contentType': activeTab.response?.contentType }}
+                args={{ tabId: activeTab.id, requestId: activeTab.request.id }}
+              />}
 			/>
 		  </div>
 		) : (
@@ -1053,11 +1071,18 @@ export function RequestWorkspace({ standaloneTabId, standalonePane }: RequestWor
                   oaMethod={oaMethod}
                   assertions={activeTab.request.assertions}
                   headerActions={
-                    <LayoutSwitcher
-                      layout={requestResponseLayout}
-                      onLayoutChange={changeRequestResponseLayout}
-                      onDetach={standaloneTabId ? undefined : () => { void detachRequestAndResponse() }}
-                    />
+                    <div className="flex items-center gap-1">
+                      <ExtensionToolbarActions
+                        location="response/toolbar"
+                        context={{ activeTool: 'request', hasResponse: Boolean(activeTab.response), 'response.status': activeTab.response?.status, 'response.contentType': activeTab.response?.contentType }}
+                        args={{ tabId: activeTab.id, requestId: activeTab.request.id }}
+                      />
+                      <LayoutSwitcher
+                        layout={requestResponseLayout}
+                        onLayoutChange={changeRequestResponseLayout}
+                        onDetach={standaloneTabId ? undefined : () => { void detachRequestAndResponse() }}
+                      />
+                    </div>
                   }
                 />
               </div>

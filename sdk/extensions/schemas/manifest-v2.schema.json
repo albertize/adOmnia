@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adomnia.local/schemas/extension-manifest-v2.json",
+  "title": "adOmnia Extension Manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifestVersion", "id", "name", "version", "publisher", "engines", "apiVersion", "main", "activationEvents"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "manifestVersion": { "const": 2 },
+    "id": { "type": "string", "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$" },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$" },
+    "publisher": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "description": { "type": "string" },
+    "license": { "type": "string" },
+    "homepage": { "type": "string" },
+    "engines": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adomnia"],
+      "properties": { "adomnia": { "type": "string", "minLength": 1 } }
+    },
+    "apiVersion": { "const": "2.0" },
+    "main": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+\\.(?:js|mjs|cjs)$" },
+    "source": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+\\.(?:ts|tsx|js|mjs)$" },
+    "activationEvents": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "contributes": { "$ref": "#/$defs/contributes" }
+  },
+  "$defs": {
+    "ownedId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$" },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title"],
+            "properties": {
+              "id": { "$ref": "#/$defs/ownedId" },
+              "title": { "type": "string", "minLength": 1 },
+              "category": { "type": "string" },
+              "icon": { "type": "string" }
+            }
+          }
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "container", "name", "renderer"],
+            "properties": {
+              "id": { "$ref": "#/$defs/ownedId" },
+              "container": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "minLength": 1 },
+              "renderer": { "enum": ["declarative", "webview"] },
+              "entry": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+\\.html$" },
+              "when": { "type": "string" }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "renderer": { "const": "webview" } } },
+                "then": { "required": ["entry"] },
+                "else": { "not": { "required": ["entry"] } }
+              }
+            ]
+          }
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/configurationProperty" }
+        },
+        "keybindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["command", "key"],
+            "properties": {
+              "command": { "$ref": "#/$defs/ownedId" },
+              "key": { "type": "string", "minLength": 1 },
+              "when": { "type": "string" }
+            }
+          }
+        },
+        "menus": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["command"],
+              "properties": {
+                "command": { "$ref": "#/$defs/ownedId" },
+                "when": { "type": "string" },
+                "group": { "type": "string" }
+              }
+            }
+          }
+        },
+        "statusBar": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text"],
+            "properties": {
+              "id": { "$ref": "#/$defs/ownedId" },
+              "text": { "type": "string", "minLength": 1 },
+              "command": { "$ref": "#/$defs/ownedId" },
+              "priority": { "type": "integer" },
+              "when": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "configurationProperty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["string", "number", "integer", "boolean", "array", "object"] },
+        "default": true,
+        "description": { "type": "string" },
+        "enum": { "type": "array" },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" }
+      }
+    }
+  }
+}

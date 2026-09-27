@@ -15,6 +15,7 @@ import {
 import { PluginSettings } from './PluginSettings'
 import { PluginDevTools } from './PluginDevTools'
 import { PluginPanel } from './PluginPanel'
+import { ExtensionPlatformV2 } from './ExtensionPlatformV2'
 
 // ─── Install modal (3 modes) ──────────────────────────────────────────────────
 
@@ -516,6 +517,7 @@ export function PluginManager() {
         <PluginDevTools embedded />
       ) : (
       <div className="flex-1 overflow-y-auto p-6">
+        <ExtensionPlatformV2 />
         <div className="mb-5 rounded-md border border-border-1 bg-surface-1 px-4 py-3">
           <p className="text-xs font-medium text-text-1">Come usare i plugin</p>
           <p className="mt-1 text-xs text-text-3">

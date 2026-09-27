@@ -1,0 +1,11 @@
+import type { ExtensionAPI } from '@adomnia/api'
+
+export async function activate(api: ExtensionAPI): Promise<void> {
+  api.context.subscriptions.add(
+    api.commands.registerCommand('{{ID}}.hello', async () => {
+      api.logging.info('TypeScript command executed')
+      await api.window.notify('Hello from {{NAME}}', 'success')
+      return { ok: true }
+    }),
+  )
+}

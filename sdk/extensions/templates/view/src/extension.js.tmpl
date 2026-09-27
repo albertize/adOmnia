@@ -1,0 +1,19 @@
+export async function activate(api) {
+  const render = async () => {
+    const count = await api.workspaceState.get('refreshCount', 0)
+    await api.views.setState('{{ID}}.results', {
+      kind: 'details',
+      title: '{{NAME}}',
+      data: { refreshCount: count },
+    })
+  }
+  await render()
+  api.context.subscriptions.add(
+    api.commands.registerCommand('{{ID}}.refresh', async () => {
+      const count = await api.workspaceState.get('refreshCount', 0)
+      await api.workspaceState.set('refreshCount', count + 1)
+      await render()
+      api.logging.info('View refreshed', { count: count + 1 })
+    }),
+  )
+}

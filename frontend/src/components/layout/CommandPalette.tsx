@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ElementType, KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { ArrowRight, CornerDownLeft, Play, Search, Server, Settings2, SquarePlus } from 'lucide-react'
+import { ArrowRight, CornerDownLeft, Play, Puzzle, Search, Server, Settings2, SquarePlus } from 'lucide-react'
 import type { Collection, RequestItem, TreeNode } from '@/lib/types'
 import { COMMAND_PALETTE_PANELS, COMMAND_PALETTE_DEEP_LINKS, fuzzyScore } from '@/lib/commandPalette'
 import { isFeatureVisible } from '@/lib/featureRegistry'
@@ -11,6 +11,7 @@ import { useCollectionsStore } from '@/stores/collections'
 import { useEnvironmentsStore } from '@/stores/environments'
 import { useTabsStore } from '@/stores/tabs'
 import { useSettingsStore } from '@/stores/settings'
+import { useExtensionsStore } from '@/stores/extensions'
 import { useNavigationTranslation, useUiTranslation } from '@/lib/uiI18n'
 
 interface CommandPaletteProps {
@@ -56,6 +57,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const newTab = useTabsStore((s) => s.newTab)
   const setActiveRail = useAppStore((s) => s.setActiveRail)
   const featureFlags = useSettingsStore((s) => s.settings.features)
+  const extensions = useExtensionsStore((s) => s.extensions)
+  const executeExtension = useExtensionsStore((s) => s.execute)
 
   useEffect(() => {
     if (!open) return
@@ -139,8 +142,24 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       group: tr('Environments'), keywords: `environment variables switch ambiente variabili cambia ${environment.name}`, icon: ArrowRight,
       run: () => setActiveEnv(environment.id),
     }))
-    return [...actions, ...deepLinks, ...panels, ...recentRequests, ...collectionEntries, ...environmentEntries]
-  }, [activeEnvId, activeWorkspaceId, collections, environments, featureFlags, nav, newTab, openTab, setActiveEnv, setActiveRail, tabs, tr])
+    const extensionEntries = extensions.flatMap<PaletteCommand>((extension) => {
+      if (!extension.enabled) return []
+      return (extension.manifest.contributes?.commands ?? []).map((command) => ({
+        id: `extension:${extension.manifest.id}:${command.id}`,
+        title: command.title,
+        subtitle: extension.manifest.name,
+        group: 'Extensions',
+        keywords: `${extension.manifest.name} ${extension.manifest.description ?? ''} ${command.category ?? ''} ${command.id}`,
+        icon: Puzzle,
+        run: () => {
+          void executeExtension(extension.manifest.id, command.id, 'palette').catch((error: unknown) => {
+            window.dispatchEvent(new CustomEvent('adomnia:extension-error', { detail: error instanceof Error ? error.message : String(error) }))
+          })
+        },
+      }))
+    })
+    return [...actions, ...extensionEntries, ...deepLinks, ...panels, ...recentRequests, ...collectionEntries, ...environmentEntries]
+  }, [activeEnvId, activeWorkspaceId, collections, environments, executeExtension, extensions, featureFlags, nav, newTab, openTab, setActiveEnv, setActiveRail, tabs, tr])
 
   const results = useMemo(() => commands
     .map((command) => ({ command, score: fuzzyScore(query, `${command.title} ${command.subtitle ?? ''} ${command.keywords}`) }))

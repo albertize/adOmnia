@@ -17,6 +17,7 @@ import (
 	"adomnia/internal/bootstrap"
 	"adomnia/internal/collectionsstore"
 	"adomnia/internal/devlog"
+	extensionRuntime "adomnia/internal/extensions"
 	"adomnia/internal/httpexec"
 	"adomnia/internal/nettools"
 	pluginRuntime "adomnia/internal/plugins"
@@ -50,7 +51,7 @@ type DroppedFileData struct {
 	BytesBase64 string `json:"bytesBase64,omitempty"`
 }
 
-const maxDroppedFileBytes = 50 * 1024 * 1024
+const maxDroppedFileBytes = 64 * 1024 * 1024
 
 func isSupportedDroppedFile(name string) bool {
 	lower := strings.ToLower(name)
@@ -66,6 +67,7 @@ func isSupportedDroppedFile(name string) bool {
 		strings.HasSuffix(lower, ".yaml"),
 		strings.HasSuffix(lower, ".yml"),
 		strings.HasSuffix(lower, ".adomnia"),
+		strings.HasSuffix(lower, ".adomnia-extension"),
 		strings.HasSuffix(lower, ".bru"):
 		return true
 	default:
@@ -174,6 +176,23 @@ func (a *App) OnStartup(ctx context.Context) {
 			a.desktop.Event.Emit("plugin:notification", notification)
 		}
 	})
+	if globalExtensionService != nil {
+		extensionRuntime.ConfigureNotifier(globalExtensionService.service, func(notification extensionRuntime.ExtensionNotification) {
+			if a.desktop != nil {
+				a.desktop.Event.Emit("extension:notification", notification)
+			}
+		})
+		extensionRuntime.ConfigureViewNotifier(globalExtensionService.service, func(update extensionRuntime.ExtensionViewUpdate) {
+			if a.desktop != nil {
+				a.desktop.Event.Emit("extension:view-state", update)
+			}
+		})
+		extensionRuntime.ConfigureDomainActionNotifier(globalExtensionService.service, func(action extensionRuntime.ExtensionDomainAction) {
+			if a.desktop != nil {
+				a.desktop.Event.Emit("extension:domain-action", action)
+			}
+		})
+	}
 	devlog.Info("OnStartup", "avvio applicazione in corso", nil)
 	stageStarted = time.Now()
 	if err := storage.Open(dataDir()); err != nil {
@@ -184,8 +203,18 @@ func (a *App) OnStartup(ctx context.Context) {
 	}
 	startupStages["storageMs"] = float64(time.Since(stageStarted).Microseconds()) / 1000
 	stageStarted = time.Now()
-	if globalPluginManager != nil {
-		if err := globalPluginManager.Init(); err != nil {
+	if globalExtensionService != nil {
+		if err := globalExtensionService.init(); err != nil {
+			log.Printf("[app] WARNING: could not initialize Extension Platform v2: %v", err)
+			devlog.Err("OnStartup", "inizializzazione Extension Platform v2 fallita", err, nil)
+		} else {
+			devlog.Log("OnStartup", "Extension Platform v2 inizializzata", nil)
+		}
+	}
+	startupStages["extensionsV2Ms"] = float64(time.Since(stageStarted).Microseconds()) / 1000
+	stageStarted = time.Now()
+	if globalLegacyExtensionAdapter != nil {
+		if err := globalLegacyExtensionAdapter.Init(); err != nil {
 			log.Printf("[app] WARNING: could not initialize plugins: %v", err)
 			devlog.Err("OnStartup", "inizializzazione plugin fallita", err, nil)
 		} else {
@@ -208,8 +237,11 @@ func (a *App) OnStartup(ctx context.Context) {
 	a.serverPort = sidecar.Start()
 	startupStages["sidecarMs"] = float64(time.Since(stageStarted).Microseconds()) / 1000
 	stageStarted = time.Now()
-	if globalPluginManager != nil {
-		globalPluginManager.FireEvent(PluginEvent{Type: "onStartup", Payload: map[string]interface{}{}})
+	if globalLegacyExtensionAdapter != nil {
+		globalLegacyExtensionAdapter.FireStartup()
+	}
+	if globalExtensionService != nil {
+		globalExtensionService.fireStartup()
 	}
 	startupStages["pluginEventMs"] = float64(time.Since(stageStarted).Microseconds()) / 1000
 	startupStages["totalMs"] = float64(time.Since(startupStarted).Microseconds()) / 1000
@@ -258,7 +290,7 @@ func (a *App) ReadDroppedFiles(paths []string) (string, error) {
 		lower := strings.ToLower(entry.Name)
 		if strings.HasSuffix(lower, ".pdf") || strings.HasSuffix(lower, ".class") {
 			entry.BytesBase64 = base64.StdEncoding.EncodeToString(data)
-		} else {
+		} else if !strings.HasSuffix(lower, ".adomnia-extension") {
 			entry.Text = string(data)
 		}
 		result = append(result, entry)
@@ -292,6 +324,18 @@ func (a *App) ReadFolderDiffFile(scanID, path string, maxBytes int64) (string, e
 		return "", err
 	}
 	return string(data), nil
+}
+
+func (a *App) SelectExtensionArchive() (string, error) {
+	if a.desktop == nil {
+		return "", fmt.Errorf("desktop runtime not initialized")
+	}
+	return a.desktop.Dialog.OpenFile().
+		CanChooseFiles(true).
+		CanChooseDirectories(false).
+		AddFilter("adOmnia extension packages", "*.adomnia-extension").
+		SetTitle("Install adOmnia extension package").
+		PromptForSingleSelection()
 }
 
 func (a *App) SelectFolder(title string) (string, error) {
@@ -507,9 +551,11 @@ func (a *App) OnShutdown(ctx context.Context) {
 			log.Printf("[app] AI gateway stop error: %v", err)
 		}
 	}
-	if globalPluginManager != nil {
-		globalPluginManager.EmitEvent(PluginEvent{Type: "onShutdown", Payload: map[string]interface{}{}})
-		globalPluginManager.Shutdown()
+	if globalLegacyExtensionAdapter != nil {
+		globalLegacyExtensionAdapter.Shutdown()
+	}
+	if globalExtensionService != nil {
+		globalExtensionService.shutdown()
 	}
 	pluginRuntime.ConfigureNotifier(nil)
 	if a.browserDebug != nil {
@@ -526,10 +572,22 @@ func (a *App) OnShutdown(ctx context.Context) {
 
 // ExecuteHTTP preserves the public Wails binding while execution lives in the HTTP module.
 func (a *App) ExecuteHTTP(reqJSON string) string {
-	if globalPluginManager != nil {
-		return httpexec.ExecuteWithHooks(reqJSON, globalPluginManager.ApplyEventJSON)
+	if globalLegacyExtensionAdapter == nil && globalExtensionService == nil {
+		return httpexec.Execute(reqJSON)
 	}
-	return httpexec.Execute(reqJSON)
+	return httpexec.ExecuteWithHooks(reqJSON, func(eventType, payloadJSON string) (string, error) {
+		var err error
+		if globalLegacyExtensionAdapter != nil {
+			payloadJSON, err = globalLegacyExtensionAdapter.ApplyEventJSON(eventType, payloadJSON)
+			if err != nil {
+				return "", err
+			}
+		}
+		if globalExtensionService != nil {
+			payloadJSON, err = globalExtensionService.applyEventJSON(eventType, payloadJSON)
+		}
+		return payloadJSON, err
+	})
 }
 
 // CancelHTTP aborts an in-flight ExecuteHTTP request by its frontend id.

@@ -6,6 +6,7 @@ import * as App from "./app.js";
 import * as BrowserDebug from "./browserdebug.js";
 import * as CollectionFS from "./collectionfs.js";
 import * as DockerLab from "./dockerlab.js";
+import * as ExtensionService from "./extensionservice.js";
 import * as GitSync from "./gitsync.js";
 import * as MCPClient from "./mcpclient.js";
 import * as MCPServerGenerator from "./mcpservergenerator.js";
@@ -20,6 +21,7 @@ export {
     BrowserDebug,
     CollectionFS,
     DockerLab,
+    ExtensionService,
     GitSync,
     MCPClient,
     MCPServerGenerator,

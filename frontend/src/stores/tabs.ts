@@ -47,6 +47,7 @@ export interface TabViewState {
   responseBodyView: ResponseBodyView
   responseScrollTop: Partial<Record<ResponseSection, number>>
   responseGraphExpanded: string[]
+  extensionResponseView: string | null
 }
 
 interface TabsState {
@@ -150,6 +151,7 @@ function defaultViewState(): TabViewState {
     responseBodyView: 'pretty',
     responseScrollTop: {},
     responseGraphExpanded: ['$'],
+    extensionResponseView: null,
   }
 }
 

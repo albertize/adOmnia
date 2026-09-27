@@ -4,6 +4,7 @@ import (
 	"adomnia/internal/adomniacli"
 	"adomnia/internal/browser"
 	"adomnia/internal/docker"
+	extensionRuntime "adomnia/internal/extensions"
 	"adomnia/internal/plugins"
 	"adomnia/internal/templates"
 	"adomnia/internal/themes"
@@ -49,7 +50,15 @@ var singleInstanceKey = [32]byte{
 }
 
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "run" || os.Args[1] == "lint" || os.Args[1] == "stress") {
+	if len(os.Args) > 1 && os.Args[1] == "extension-host" {
+		if err := extensionRuntime.RunExtensionHost(os.Stdin, os.Stdout); err != nil {
+			log.Printf("[extension-host] %v", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && (os.Args[1] == "run" || os.Args[1] == "lint" || os.Args[1] == "stress" || os.Args[1] == "extension") {
+		adomniacli.AppVersion = Version
 		os.Exit(adomniacli.Run(os.Args[1:], os.Stdout, os.Stderr))
 	}
 
@@ -62,8 +71,11 @@ func main() {
 	templateStore := NewTemplateStore()
 	pluginManager := NewPluginManager()
 	globalPluginManager = pluginManager
+	globalLegacyExtensionAdapter = extensionRuntime.NewLegacyAdapter(pluginManager.PluginManager)
 	wasmRuntime := NewWasmRuntime()
 	plugins.AttachRuntime(pluginManager.PluginManager, wasmRuntime.WasmRuntime)
+	extensionService := NewExtensionService()
+	globalExtensionService = extensionService
 	dockerLab := NewDockerLab()
 	aiEngine := NewAIEngine()
 	globalAIEngine = aiEngine
@@ -86,6 +98,7 @@ func main() {
 			application.NewService(templateStore),
 			application.NewService(pluginManager),
 			application.NewService(wasmRuntime),
+			application.NewService(extensionService),
 			application.NewService(dockerLab),
 			application.NewService(aiEngine),
 			application.NewService(gitSync),
@@ -225,6 +238,7 @@ type PluginEvent = plugins.PluginEvent
 type PluginManager struct{ *plugins.PluginManager }
 
 var globalPluginManager *PluginManager
+var globalLegacyExtensionAdapter *extensionRuntime.LegacyAdapter
 
 func NewPluginManager() *PluginManager {
 	plugins.Configure(dataDir())

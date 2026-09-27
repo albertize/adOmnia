@@ -1,0 +1,13 @@
+export async function activate(api) {
+  api.context.subscriptions.add(
+    api.events.onResponse((response) => {
+      api.logging.info('Response observed', { status: response.status })
+    }),
+  )
+  api.context.subscriptions.add(
+    api.commands.registerCommand('{{ID}}.inspect', async () => {
+      api.logging.info('Response inspection requested')
+      await api.window.notify('{{NAME}} is ready to inspect responses', 'info')
+    }),
+  )
+}

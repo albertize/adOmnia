@@ -52,6 +52,15 @@ The Go backend owns local system integrations:
 
 Wails exposes backend methods to the frontend through generated bindings.
 
+### Extension Platform v2 foundation
+
+The executable extension host is still planned, but its package contract and authoring
+foundation live in `internal/extensions` and `sdk/extensions`. The headless
+`adomnia extension` command can scaffold, strictly validate, deterministically package,
+and export the embedded Markdown SDK. This v2 foundation is intentionally separate from
+`internal/plugins`, which remains the currently executable v1 JavaScript plugin runtime.
+See `docs/EXTENSION-PLATFORM-PLAN.md` for the target subprocess and contribution architecture.
+
 ## Storage
 
 adOmnia uses local storage only:

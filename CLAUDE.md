@@ -59,6 +59,7 @@ Use these files as the fastest way to understand adOmnia before changing behavio
 |------|---------|
 | `docs/SOUL.md` | Product soul, UX philosophy, visual/product expectations, and long-term direction. Read this for any UX, theme, workflow, or product-quality decision. |
 | `docs/adomnia-feature-catalog.en.md` | Complete feature inventory. Read this when you need to quickly understand all project capabilities or avoid duplicating an existing tool. |
+| `docs/EXTENSION-PLATFORM-PLAN.md` | Proposed Extension Platform v2 architecture, security model, agent-first SDK, compatibility strategy, and phased delivery plan. Read before changing plugins/extensions. |
 | `docs/ISSUES.md` | Current open issues, bugs, active work queue, and completion status across product areas. |
 | `README.md` | Public product positioning and quick-start overview. |
 | `AGENTS.md` | Practical operating guide for AI agents in this repo. |
@@ -213,6 +214,7 @@ The `@wailsio/runtime` npm version is **version-locked** to `github.com/wailsapp
 | Data/security | `internal/database`, `internal/storage`, `internal/vault`, `internal/oauth` |
 | Docker Lab | `internal/docker`, `frontend/src/lib/dockerlab-api.ts` |
 | Customization | `internal/themes`, `internal/plugins`, `internal/templates` |
+| Extension Platform v2 foundation | `internal/extensions`, `sdk/extensions`, `docs/extensions`; package contracts and CLI are implemented, runtime activation is not yet shipped |
 | Git Sync | `internal/git`, `git_bindings.go`, `git_bindings_ops.go` |
 
 **IPC:** Frontend calls backend through Wails generated bindings.  
@@ -512,4 +514,6 @@ Four files live at the root — everything else is under `docs/`:
 | `docs/FAQ.md` | Frequently asked questions |
 | `docs/TROUBLESHOOTING.md` | Common problems and fixes |
 | `docs/ARCHITECTURE.md` | High-level architecture overview |
+| `docs/LOG-INSPECTOR.md` | Log Inspector engineering reference: parsing pipeline, field aliases, query language, correlation, large-input strategy, wiring |
+| `docs/EXTENSION-PLATFORM-PLAN.md` | Extension Platform v2 plan: subprocess runtime, contribution points, permissions, packaging, agent SDK, migration, and release gates. |
 | `.github/SECURITY.md` | Security policy (picked up by GitHub's Security tab) |

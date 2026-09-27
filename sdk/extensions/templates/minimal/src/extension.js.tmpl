@@ -1,0 +1,9 @@
+export async function activate(api) {
+  api.context.subscriptions.add(
+    api.commands.registerCommand('{{ID}}.hello', async () => {
+      api.logging.info('Hello command executed')
+      await api.window.notify('Hello from {{NAME}}', 'success')
+      return { ok: true }
+    }),
+  )
+}

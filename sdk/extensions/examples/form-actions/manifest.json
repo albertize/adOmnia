@@ -1,0 +1,19 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.form-actions-example",
+  "name": "Form Actions Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Demonstrates a host-native form wired to an owned command.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onView:adomnia.form-actions-example.form", "onCommand:adomnia.form-actions-example.submit"],
+  "permissions": [],
+  "contributes": {
+    "commands": [{ "id": "adomnia.form-actions-example.submit", "title": "Submit example form", "category": "Examples" }],
+    "views": [{ "id": "adomnia.form-actions-example.form", "container": "extensions", "name": "Example Form", "renderer": "declarative" }]
+  }
+}

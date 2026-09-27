@@ -1,0 +1,6 @@
+# Extension authoring instructions
+
+Read the version-matched SDK documentation before editing. In the adOmnia repository use `sdk/extensions/docs/`; elsewhere export it with `adomnia extension sdk <directory>`.
+Do not assume an event exists unless `docs/EVENTS.md` marks it implemented. Keep permissions minimal and never log response secrets.
+
+Run `adomnia extension check . --json` and `adomnia extension pack . --json` before delivery.

@@ -21,17 +21,24 @@ export function PluginNotificationToast() {
   const dismissTimer = useRef<number | null>(null)
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined
+    const unsubscribers: Array<() => void> = []
+    const show = (next: PluginNotification) => {
+      setNotification(next)
+      if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current)
+      dismissTimer.current = window.setTimeout(() => setNotification(null), 5000)
+    }
+    const onExtensionError = (event: Event) => show({ pluginId: 'Extension', title: 'Extension command failed', message: String((event as CustomEvent).detail), type: 'error' })
+    window.addEventListener('adomnia:extension-error', onExtensionError)
     void import('@/wailsjs/runtime/runtime').then(({ EventsOn }) => {
-      unsubscribe = EventsOn('plugin:notification', (value) => {
-        const next = value as PluginNotification
-        setNotification(next)
-        if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current)
-        dismissTimer.current = window.setTimeout(() => setNotification(null), 5000)
-      })
+      unsubscribers.push(EventsOn('plugin:notification', (value) => show(value as PluginNotification)))
+      unsubscribers.push(EventsOn('extension:notification', (value) => {
+        const next = value as { extensionId: string; message: string; type: PluginNotification['type'] }
+        show({ pluginId: next.extensionId, title: next.extensionId, message: next.message, type: next.type })
+      }))
     })
     return () => {
-      unsubscribe?.()
+      unsubscribers.forEach((unsubscribe) => unsubscribe())
+      window.removeEventListener('adomnia:extension-error', onExtensionError)
       if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current)
     }
   }, [])

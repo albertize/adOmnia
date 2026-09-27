@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Box, FolderKanban, Leaf, Moon, Sun, Pencil } from 'lucide-react'
+import { Box, FolderKanban, Leaf, Moon, Sun, Pencil, Puzzle } from 'lucide-react'
 import { useCollectionsStore } from '@/stores/collections'
 import { useTabsStore } from '@/stores/tabs'
 import { useAppStore } from '@/stores/app'
@@ -8,6 +8,7 @@ import { useThemeContext } from '@/components/themes/ThemeProvider'
 import { inferThemeMode } from '@/lib/themeCatalog'
 import { cn } from '@/lib/utils'
 import { useUiTranslation } from '@/lib/uiI18n'
+import { useExtensionsStore } from '@/stores/extensions'
 
 export function StatusBar() {
   const tr = useUiTranslation()
@@ -23,6 +24,8 @@ export function StatusBar() {
   const activeThemeId = useThemesStore((s) => s.activeThemeId)
   const { applyTheme } = useThemeContext()
   const [saveError, setSaveError] = useState<string | null>(null)
+  const extensions = useExtensionsStore((s) => s.extensions)
+  const executeExtension = useExtensionsStore((s) => s.execute)
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -160,6 +163,26 @@ export function StatusBar() {
           </button>
         )}
         {(mockRunning || proxyRunning) && (
+          <span className="h-3 w-px bg-border-2" />
+        )}
+        {extensions.flatMap((extension) => extension.enabled
+          ? (extension.manifest.contributes?.statusBar ?? []).map((item) => ({ extension, item }))
+          : [])
+          .sort((left, right) => (right.item.priority ?? 0) - (left.item.priority ?? 0))
+          .map(({ extension, item }) => (
+            <button
+              key={`${extension.manifest.id}:${item.id}`}
+              type="button"
+              title={`${extension.manifest.name}: ${item.text}`}
+              disabled={!item.command}
+              onClick={() => item.command && void executeExtension(extension.manifest.id, item.command, 'statusBar')}
+              className="flex items-center gap-1 text-text-4 transition-colors enabled:hover:text-text-2 disabled:cursor-default"
+            >
+              <Puzzle size={9} className="text-accent" />
+              <span>{item.text}</span>
+            </button>
+          ))}
+        {extensions.some((extension) => extension.enabled && (extension.manifest.contributes?.statusBar?.length ?? 0) > 0) && (
           <span className="h-3 w-px bg-border-2" />
         )}
         {/* Quick appearance buttons make the available skins discoverable; the

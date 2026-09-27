@@ -1,0 +1,23 @@
+{
+  "$schema": "https://adomnia.local/schemas/extension-manifest-v2.json",
+  "manifestVersion": 2,
+  "id": "{{ID}}",
+  "name": "{{NAME}}",
+  "version": "0.1.0",
+  "publisher": "{{PUBLISHER}}",
+  "description": "An adOmnia extension with an isolated custom webview.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=1.0.0 <2" },
+  "apiVersion": "2.0",
+  "main": "src/extension.js",
+  "activationEvents": ["onView:{{ID}}.panel", "onCommand:{{ID}}.ping"],
+  "permissions": ["notifications"],
+  "contributes": {
+    "commands": [
+      { "id": "{{ID}}.ping", "title": "Ping Webview", "category": "{{NAME}}" }
+    ],
+    "views": [
+      { "id": "{{ID}}.panel", "container": "extensions", "name": "{{NAME}}", "renderer": "webview", "entry": "ui/index.html" }
+    ]
+  }
+}

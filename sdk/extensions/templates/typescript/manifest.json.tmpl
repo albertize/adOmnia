@@ -1,0 +1,21 @@
+{
+  "$schema": "https://adomnia.local/schemas/extension-manifest-v2.json",
+  "manifestVersion": 2,
+  "id": "{{ID}}",
+  "name": "{{NAME}}",
+  "version": "0.1.0",
+  "publisher": "{{PUBLISHER}}",
+  "description": "A bundled TypeScript adOmnia extension.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=1.0.0 <2" },
+  "apiVersion": "2.0",
+  "main": "dist/extension.js",
+  "source": "src/extension.ts",
+  "activationEvents": ["onCommand:{{ID}}.hello"],
+  "permissions": ["notifications"],
+  "contributes": {
+    "commands": [
+      { "id": "{{ID}}.hello", "title": "Say Hello", "category": "{{NAME}}" }
+    ]
+  }
+}

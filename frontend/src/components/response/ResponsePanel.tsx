@@ -18,6 +18,10 @@ import { uid } from '@/lib/types'
 import defaultResponseLogo from '../../../../assets/images/spinner.png'
 import { useResponseLogo, useIsSketchSkin } from '@/lib/brandAssets'
 import { useUiTranslation } from '@/lib/uiI18n'
+import { useExtensionsStore } from '@/stores/extensions'
+import { evaluateWhen } from '@/lib/extensionContext'
+import { ExtensionDeclarativeView } from '@/components/plugins/ExtensionDeclarativeView'
+import { ExtensionWebview } from '@/components/plugins/ExtensionWebview'
 
 interface ResponsePanelProps {
   tabId: string
@@ -518,6 +522,18 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
   const initialViewState = useTabsStore.getState().getViewState(tabId)
   const updateViewState = useTabsStore((s) => s.updateViewState)
   const [tab, setTab] = useState<ResponseSection>(initialViewState.responseSection)
+  const [extensionViewKey, setExtensionViewKey] = useState<string | null>(initialViewState.extensionResponseView ?? null)
+  const extensions = useExtensionsStore((state) => state.extensions)
+  const responseViews = useMemo(() => extensions.flatMap((extension) => extension.enabled
+    ? (extension.manifest.contributes?.views ?? [])
+      .filter((item) => item.container === 'response' && evaluateWhen(item.when, { hasResponse: Boolean(response), 'response.status': response?.status, 'response.contentType': response?.contentType }))
+      .map((item) => ({ extensionId: extension.manifest.id, view: item, key: `${extension.manifest.id}:${item.id}` }))
+    : []), [extensions, response])
+  const activeExtensionView = responseViews.find((item) => item.key === extensionViewKey) ?? null
+  useEffect(() => {
+    if (extensionViewKey && !activeExtensionView) setExtensionViewKey(null)
+    updateViewState(tabId, { extensionResponseView: activeExtensionView?.key ?? null })
+  }, [activeExtensionView, extensionViewKey, tabId, updateViewState])
   const [view, setView] = useState<ResponseBodyView>(initialViewState.responseBodyView)
   const [beautifiedBody, setBeautifiedBody] = useState<string | null>(null)
   // Lifted expansion state — survives graph↔pretty toggles and re-sends (P2-02)
@@ -829,16 +845,25 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
         <NetworkTimeline response={response} />
 
         {/* Tabs with action buttons */}
-        <div className="flex items-center gap-0.5 px-3 border-b border-border-1">
+        <div role="tablist" aria-label={tr('Response views')} onKeyDown={(event) => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+          const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+          const index = tabs.indexOf(document.activeElement as HTMLButtonElement)
+          if (index < 0 || tabs.length === 0) return
+          event.preventDefault()
+          tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]?.focus()
+        }} className="flex items-center gap-0.5 px-3 border-b border-border-1">
           <button
-            onClick={() => { setTab('body'); updateViewState(tabId, { responseSection: 'body' }) }}
+            role="tab" aria-selected={!activeExtensionView && tab === 'body'}
+            onClick={() => { setExtensionViewKey(null); setTab('body'); updateViewState(tabId, { responseSection: 'body' }) }}
             className={cn('px-3 py-2 text-xs relative', tab === 'body' ? 'text-text-1' : 'text-text-3 hover:text-text-2')}
           >
             {tr('Body')}
             {tab === 'body' && <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-accent rounded-t" />}
           </button>
           <button
-            onClick={() => { setTab('headers'); updateViewState(tabId, { responseSection: 'headers' }) }}
+            role="tab" aria-selected={!activeExtensionView && tab === 'headers'}
+            onClick={() => { setExtensionViewKey(null); setTab('headers'); updateViewState(tabId, { responseSection: 'headers' }) }}
             className={cn('px-3 py-2 text-xs relative', tab === 'headers' ? 'text-text-1' : 'text-text-3 hover:text-text-2')}
           >
             {tr('Headers')}
@@ -850,7 +875,8 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
 
           {contractResult?.hasSpec && (
             <button
-              onClick={() => { setTab('contract'); updateViewState(tabId, { responseSection: 'contract' }) }}
+              role="tab" aria-selected={!activeExtensionView && tab === 'contract'}
+              onClick={() => { setExtensionViewKey(null); setTab('contract'); updateViewState(tabId, { responseSection: 'contract' }) }}
               className={cn('px-3 py-2 text-xs relative', tab === 'contract' ? 'text-text-1' : 'text-text-3 hover:text-text-2')}
             >
               {tr('Contract')}
@@ -869,7 +895,8 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
 
           {!contractResult?.hasSpec && oaSpec && (
             <button
-              onClick={() => { setTab('contract'); updateViewState(tabId, { responseSection: 'contract' }) }}
+              role="tab" aria-selected={!activeExtensionView && tab === 'contract'}
+              onClick={() => { setExtensionViewKey(null); setTab('contract'); updateViewState(tabId, { responseSection: 'contract' }) }}
               className={cn('px-3 py-2 text-xs relative', tab === 'contract' ? 'text-text-1' : 'text-text-3 hover:text-text-2')}
             >
               {tr('Contract')}
@@ -882,7 +909,8 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
 
           {testResultCount > 0 && (
             <button
-              onClick={() => { setTab('assertions'); updateViewState(tabId, { responseSection: 'assertions' }) }}
+              role="tab" aria-selected={!activeExtensionView && tab === 'assertions'}
+              onClick={() => { setExtensionViewKey(null); setTab('assertions'); updateViewState(tabId, { responseSection: 'assertions' }) }}
               className={cn('px-3 py-2 text-xs relative', tab === 'assertions' ? 'text-text-1' : 'text-text-3 hover:text-text-2')}
             >
               {tr('Tests')}
@@ -898,7 +926,14 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
             </button>
           )}
 
-          {tab === 'body' && (
+          {responseViews.map((item) => (
+            <button role="tab" aria-selected={extensionViewKey === item.key} key={item.key} onClick={() => setExtensionViewKey(item.key)} className={cn('px-3 py-2 text-xs relative', extensionViewKey === item.key ? 'text-text-1' : 'text-text-3 hover:text-text-2')}>
+              {item.view.name}
+              {extensionViewKey === item.key && <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-accent rounded-t" />}
+            </button>
+          ))}
+
+          {tab === 'body' && !activeExtensionView && (
             <div className="flex items-center gap-1 ml-auto">
               {view !== 'graph' && (
                 <button
@@ -1006,7 +1041,7 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
         </div>
 
         {/* Find bar — shown only on the Body tab when open */}
-        {tab === 'body' && view !== 'graph' && searchOpen && (
+        {tab === 'body' && !activeExtensionView && view !== 'graph' && searchOpen && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border-1 bg-surface-2">
             <Search size={11} className="text-text-4 shrink-0" />
             <input
@@ -1082,6 +1117,11 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
           }}
           className="flex-1 overflow-auto p-3"
         >
+          {activeExtensionView ? (
+            activeExtensionView.view.renderer === 'webview'
+              ? <ExtensionWebview extensionId={activeExtensionView.extensionId} viewId={activeExtensionView.view.id} name={activeExtensionView.view.name} />
+              : <ExtensionDeclarativeView extensionId={activeExtensionView.extensionId} viewId={activeExtensionView.view.id} name={activeExtensionView.view.name} />
+          ) : <>
           {tab === 'body' && (
             view === 'graph' && graphData ? (
               <JsonGraph
@@ -1144,6 +1184,7 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
           {tab === 'assertions' && testResultCount > 0 && (
             <AssertionsView results={assertionResults} scriptRuns={scriptRuns} />
           )}
+          </>}
         </div>
       </div>
 

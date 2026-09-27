@@ -1,0 +1,11 @@
+# {{NAME}}
+
+Custom adOmnia webview extension. The iframe runs with `sandbox="allow-scripts"`, a strict CSP, no parent DOM access, and no Wails bindings.
+
+Use `window.adomnia.executeCommand(commandId, args)` to communicate with the extension host. Prefer declarative views for ordinary lists, tables, details, Markdown, and JSON.
+
+```bash
+adomnia extension check . --json
+adomnia extension test . --command {{ID}}.ping --json
+adomnia extension pack . --json
+```

@@ -1,0 +1,8 @@
+export async function activate(api) {
+  api.context.subscriptions.add(
+    api.commands.registerCommand('{{ID}}.ping', async () => {
+      await api.window.notify('Message received from {{NAME}}', 'success')
+      return { ok: true, timestamp: new Date().toISOString() }
+    }),
+  )
+}

@@ -35,6 +35,7 @@ import {
   type ExportFormat,
 } from '@/lib/collectionTransfer'
 import { collectionToOAS } from '@/lib/oasExport'
+import { notifyExtensionWorkbenchEvent } from '@/lib/extensions-v2-api'
 
 interface CollectionTreeProps {
   collections: Collection[]
@@ -727,6 +728,7 @@ export function CollectionTree({
         const exists = collections.some((current) => current.name === collection.name)
         onImportCollection(exists ? cloneCollection(collection, `${collection.name} Import`) : collection)
       }
+      void notifyExtensionWorkbenchEvent('onImport', { collections: result.collections.length, source: file.name }).catch(() => undefined)
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed')
     } finally {
@@ -736,11 +738,13 @@ export function CollectionTree({
 
   const exportCollection = (collection: Collection, format: ExportFormat) => {
     downloadText(`${slug(collection.name)}.${format}.json`, exportCollectionPayload(collection, format))
+    void notifyExtensionWorkbenchEvent('onExport', { kind: 'collection', id: collection.id, format }).catch(() => undefined)
     setContext(null)
   }
 
   const exportCollectionOASYaml = (collection: Collection) => {
     downloadText(`${slug(collection.name)}.openapi.yaml`, collectionToOAS(collection, 'yaml'), 'text/yaml')
+    void notifyExtensionWorkbenchEvent('onExport', { kind: 'collection', id: collection.id, format: 'openapi-yaml' }).catch(() => undefined)
     setContext(null)
   }
 
@@ -748,11 +752,13 @@ export function CollectionTree({
     const collection = collections.find((item) => item.id === collectionId)
     if (!collection) return
     downloadText(`${slug(node.name)}.${format}.json`, exportNodePayload(collection, node, format))
+    void notifyExtensionWorkbenchEvent('onExport', { kind: 'node', collectionId, id: node.id, format }).catch(() => undefined)
     setContext(null)
   }
 
   const exportAll = (format: ExportFormat) => {
     downloadText(`adomnia-collections.${format}.json`, exportAllCollectionsPayload(collections, format))
+    void notifyExtensionWorkbenchEvent('onExport', { kind: 'all-collections', count: collections.length, format }).catch(() => undefined)
     setContext(null)
   }
 

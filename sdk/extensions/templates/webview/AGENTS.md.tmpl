@@ -1,0 +1,5 @@
+# Extension authoring instructions
+
+Read the version-matched SDK, especially `docs/WEBVIEWS.md` and `docs/SECURITY.md`. Keep this webview self-contained: packaged HTML, inline script/style, data/blob images, and bridge calls only. Never request broad network access to work around the CSP.
+
+Run `adomnia extension check . --json`, `adomnia extension test . --command {{ID}}.ping --json`, and `adomnia extension pack . --json` before delivery.

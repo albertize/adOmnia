@@ -506,6 +506,8 @@ export const ITALIAN_UI_MESSAGES = {
   'Environment': 'Ambiente',
   '+ New environment (Default)': '+ Nuovo ambiente (Predefinito)',
   'Response Body': 'Corpo risposta',
+  'Response views': 'Viste risposta',
+  'Extension actions': 'Azioni estensione',
   'Copy': 'Copia',
   'Ready for the response.': 'In attesa della risposta.',
   'or press': 'oppure premi',

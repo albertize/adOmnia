@@ -10,6 +10,9 @@ import { ContextMenu } from '@/components/ui/ContextMenu'
 import { REQUEST_DRAG_TYPE } from '@/lib/collectionMoves'
 import { openDroppedRequests } from '@/components/collections/useTreeInteraction'
 import { useTabsStore } from '@/stores/tabs'
+import { useExtensionsStore } from '@/stores/extensions'
+import { executeExtensionCommand } from '@/lib/extensions-v2-api'
+import { evaluateWhen } from '@/lib/extensionContext'
 
 interface TabBarProps {
   tabs: Tab[]
@@ -82,6 +85,18 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onCloseToRight, o
   const [stripWidth, setStripWidth] = useState(0)
   const [overflowMenu, setOverflowMenu] = useState<{ x: number; y: number } | null>(null)
   const [savedFlashTabs, setSavedFlashTabs] = useState<Set<string>>(() => new Set())
+  const extensions = useExtensionsStore((state) => state.extensions)
+  const contextExtensionItems = useMemo(() => {
+    const tab = tabs.find((item) => item.id === ctx.tabId)
+    const values = { activeTool: tab?.tool ?? 'request', hasResponse: Boolean(tab?.response), 'response.status': tab?.response?.status, 'response.contentType': tab?.response?.contentType }
+    return extensions.flatMap((extension) => {
+      if (!extension.enabled) return []
+      const titles = new Map((extension.manifest.contributes?.commands ?? []).map((command) => [command.id, command.title]))
+      return (extension.manifest.contributes?.menus?.['tab/context'] ?? [])
+        .filter((item) => evaluateWhen(item.when, values))
+        .map((item) => ({ extensionId: extension.manifest.id, command: item.command, label: titles.get(item.command) ?? item.command, group: item.group ?? '' }))
+    }).sort((left, right) => left.group.localeCompare(right.group) || left.label.localeCompare(right.label))
+  }, [ctx.tabId, extensions, tabs])
 
   // How many tabs the strip can still render at a readable width. Everything
   // past that goes to the overflow menu instead of scrolling out of sight.
@@ -418,6 +433,20 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onCloseToRight, o
           <div className="px-3 py-1.5 border-b border-border-1 mb-1">
             <span className="text-[9px] font-semibold text-text-4 uppercase tracking-wider">{tr('Tab')}</span>
           </div>
+          {contextExtensionItems.map((item, index) => (
+            <button
+              key={`${item.extensionId}:${item.command}:${index}`}
+              onClick={() => {
+                closeCtx()
+                void executeExtensionCommand(item.extensionId, item.command, { tabId: ctx.tabId }, 'menu').catch((error: unknown) => window.dispatchEvent(new CustomEvent('adomnia:extension-error', { detail: error instanceof Error ? error.message : String(error) })))
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-text-1 hover:bg-surface-2 transition-colors text-left"
+            >
+              <Braces size={11} className="text-accent" />
+              <span className="truncate">{item.label}</span>
+            </button>
+          ))}
+          {contextExtensionItems.length > 0 && <div className="my-1 border-t border-border-1" />}
           <button
             onClick={() => { onTogglePinned(ctx.tabId); closeCtx() }}
             className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-text-1 hover:bg-surface-2 transition-colors text-left"
