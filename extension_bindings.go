@@ -103,6 +103,14 @@ func (e *ExtensionService) NotifyWorkbenchEvent(event, payloadJSON string) error
 	return e.service.NotifyWorkbenchEvent(event, payloadJSON)
 }
 
+func (e *ExtensionService) EvaluateAssertions(payloadJSON string) ([]extensionRuntime.AssertionProviderResult, error) {
+	return e.service.EvaluateAssertions(payloadJSON)
+}
+
+func (e *ExtensionService) EvaluateVariableProviders(contextJSON string) ([]extensionRuntime.VariableProviderResult, error) {
+	return e.service.EvaluateVariableProviders(contextJSON)
+}
+
 func (e *ExtensionService) init() error  { return e.service.Init() }
 func (e *ExtensionService) fireStartup() { e.service.FireStartup() }
 func (e *ExtensionService) shutdown()    { e.service.Shutdown() }

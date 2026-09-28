@@ -11,6 +11,7 @@ const KEY = 'all'
 interface EnvironmentsState {
   environments: Environment[]
   activeEnvId: string | null
+  extensionVariables: Record<string, string>
   loaded: boolean
   loadError: boolean
   load: (rawOverride?: unknown) => Promise<void>
@@ -21,12 +22,14 @@ interface EnvironmentsState {
   renameEnvironment: (id: string, name: string) => void
   setEnvironmentPrivate: (id: string, value: boolean) => void
   updateVariables: (envId: string, variables: EnvVariable[]) => void
+  setExtensionVariables: (variables: Record<string, string>) => void
   getResolvedVars: () => Record<string, string>
 }
 
 export const useEnvironmentsStore = create<EnvironmentsState>((set, get) => ({
   environments: [],
   activeEnvId: null,
+  extensionVariables: {},
   loaded: false,
   loadError: false,
 
@@ -101,11 +104,13 @@ export const useEnvironmentsStore = create<EnvironmentsState>((set, get) => ({
     get().save()
   },
 
+  setExtensionVariables: (extensionVariables) => set({ extensionVariables }),
+
   getResolvedVars: () => {
-    const { environments, activeEnvId } = get()
+    const { environments, activeEnvId, extensionVariables } = get()
     const env = environments.find((e) => e.id === activeEnvId)
-    if (!env) return {}
-    const vars: Record<string, string> = {}
+    const vars: Record<string, string> = { ...extensionVariables }
+    if (!env) return vars
     for (const v of env.variables) {
       if (v.enabled && v.key) vars[v.key] = v.value
     }

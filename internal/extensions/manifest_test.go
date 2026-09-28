@@ -147,6 +147,55 @@ func TestValidateManifestConfigurationActivationAndMenuLocations(t *testing.T) {
 	}
 }
 
+func TestValidateManifestAssertionProviderActivationRequiresPermission(t *testing.T) {
+	manifest := validTestManifest()
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onAssertions")
+	if diagnostics := ValidateManifest(manifest); !hasDiagnostic(diagnostics, "activation.permission") {
+		t.Fatalf("missing assertion permission diagnostic: %#v", diagnostics)
+	}
+	manifest.Permissions = append(manifest.Permissions, "assertions.provide")
+	if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+		t.Fatalf("valid assertion provider diagnostics: %#v", diagnostics)
+	}
+}
+
+func TestValidateManifestVariableProviderActivationRequiresPermission(t *testing.T) {
+	manifest := validTestManifest()
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onVariables")
+	if diagnostics := ValidateManifest(manifest); !hasDiagnostic(diagnostics, "activation.permission") {
+		t.Fatalf("missing variable provider permission diagnostic: %#v", diagnostics)
+	}
+	manifest.Permissions = append(manifest.Permissions, "variables.provide")
+	if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+		t.Fatalf("valid variable provider diagnostics: %#v", diagnostics)
+	}
+}
+
+func TestValidateManifestBrowserEventRequiresReadPermission(t *testing.T) {
+	manifest := validTestManifest()
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onBrowserNetwork")
+	if diagnostics := ValidateManifest(manifest); !hasDiagnostic(diagnostics, "activation.permission") {
+		t.Fatalf("missing browser permission diagnostic: %#v", diagnostics)
+	}
+	manifest.Permissions = append(manifest.Permissions, "browserDebug.read")
+	if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+		t.Fatalf("valid browser event diagnostics: %#v", diagnostics)
+	}
+}
+
+func TestValidateManifestMockAndProxyEventsRequireReadPermissions(t *testing.T) {
+	manifest := validTestManifest()
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onMockHit", "onProxyTraffic")
+	diagnostics := ValidateManifest(manifest)
+	if !hasDiagnostic(diagnostics, "activation.permission") {
+		t.Fatalf("missing runtime read permission diagnostics: %#v", diagnostics)
+	}
+	manifest.Permissions = append(manifest.Permissions, "mock.read", "proxy.read")
+	if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+		t.Fatalf("valid runtime event diagnostics: %#v", diagnostics)
+	}
+}
+
 func validTestManifest() Manifest {
 	return Manifest{
 		ManifestVersion:  SupportedManifestVersion,

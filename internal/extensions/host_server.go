@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,12 +41,14 @@ type hostServer struct {
 }
 
 type extensionRuntime struct {
-	manifest Manifest
-	settings map[string]any
-	vm       *goja.Runtime
-	module   *goja.Object
-	commands map[string]goja.Callable
-	events   map[string][]goja.Callable
+	manifest           Manifest
+	settings           map[string]any
+	vm                 *goja.Runtime
+	module             *goja.Object
+	commands           map[string]goja.Callable
+	events             map[string][]goja.Callable
+	assertionProviders map[string]goja.Callable
+	variableProviders  map[string]goja.Callable
 }
 
 // RunExtensionHost runs the private child-process protocol. It must be invoked
@@ -162,6 +165,18 @@ func (s *hostServer) dispatch(operationID, method string, params json.RawMessage
 			return nil, err, false
 		}
 		return s.dispatchEvent(operationID, request), nil, false
+	case "evaluateAssertions":
+		var request EvaluateAssertionsRequest
+		if err := json.Unmarshal(params, &request); err != nil {
+			return nil, err, false
+		}
+		return s.evaluateAssertions(operationID, request), nil, false
+	case "evaluateVariableProviders":
+		var request EvaluateVariableProvidersRequest
+		if err := json.Unmarshal(params, &request); err != nil {
+			return nil, err, false
+		}
+		return s.evaluateVariableProviders(operationID, request), nil, false
 	case "deactivate":
 		var request DeactivateHostRequest
 		if err := json.Unmarshal(params, &request); err != nil {
@@ -196,7 +211,7 @@ func (s *hostServer) activate(operationID string, request ActivateHostRequest) H
 	_ = vm.Set("exports", exports)
 	runtime := &extensionRuntime{
 		manifest: request.Manifest, settings: request.Settings, vm: vm, module: module,
-		commands: map[string]goja.Callable{}, events: map[string][]goja.Callable{},
+		commands: map[string]goja.Callable{}, events: map[string][]goja.Callable{}, assertionProviders: map[string]goja.Callable{}, variableProviders: map[string]goja.Callable{},
 	}
 	api, err := s.buildAPI(runtime)
 	if err != nil {
@@ -327,6 +342,130 @@ func (s *hostServer) dispatchEvent(operationID string, request DispatchEventRequ
 		}
 	}
 	return HostExecutionResult{Success: true, Data: payload, Modified: modified, TimeMS: elapsedMS(started)}
+}
+
+func (s *hostServer) evaluateAssertions(operationID string, request EvaluateAssertionsRequest) HostExecutionResult {
+	started := time.Now()
+	runtime := s.runtimes[request.ExtensionID]
+	if runtime == nil {
+		return executionFailure(started, fmt.Errorf("extension is not active: %s", request.ExtensionID))
+	}
+	s.beginOperation(operationID, runtime.vm)
+	defer s.finishOperation(operationID)
+	providerIDs := make([]string, 0, len(runtime.assertionProviders))
+	for id := range runtime.assertionProviders {
+		providerIDs = append(providerIDs, id)
+	}
+	sort.Strings(providerIDs)
+	results := make([]AssertionProviderResult, 0)
+	for _, providerID := range providerIDs {
+		handler := runtime.assertionProviders[providerID]
+		var exported interface{}
+		err := runWithTimeout(runtime.vm, 10*time.Second, func() error {
+			value, err := handler(goja.Undefined(), runtime.vm.ToValue(request.Payload))
+			if err != nil {
+				return err
+			}
+			if promise, ok := value.Export().(*goja.Promise); ok {
+				if promise.State() == goja.PromiseStateRejected {
+					return fmt.Errorf("%s", promise.Result().String())
+				}
+				if promise.State() == goja.PromiseStatePending {
+					return fmt.Errorf("assertion provider returned a pending promise")
+				}
+				value = promise.Result()
+			}
+			if goja.IsUndefined(value) || goja.IsNull(value) {
+				return nil
+			}
+			exported = value.Export()
+			return nil
+		})
+		if err != nil {
+			return executionFailure(started, fmt.Errorf("assertion provider %s failed: %w", providerID, err))
+		}
+		if exported == nil {
+			continue
+		}
+		data, err := json.Marshal(exported)
+		if err != nil || len(data) > maxStateValueBytes {
+			return executionFailure(started, fmt.Errorf("assertion provider %s returned invalid or oversized data", providerID))
+		}
+		var entries []AssertionProviderResult
+		if len(data) > 0 && data[0] == '[' {
+			err = json.Unmarshal(data, &entries)
+		} else {
+			var entry AssertionProviderResult
+			err = json.Unmarshal(data, &entry)
+			entries = []AssertionProviderResult{entry}
+		}
+		if err != nil {
+			return executionFailure(started, fmt.Errorf("assertion provider %s returned invalid data: %w", providerID, err))
+		}
+		for index := range entries {
+			entries[index].ProviderID = providerID
+			if strings.TrimSpace(entries[index].Label) == "" {
+				return executionFailure(started, fmt.Errorf("assertion provider %s returned a result without a label", providerID))
+			}
+		}
+		results = append(results, entries...)
+		if len(results) > 200 {
+			return executionFailure(started, fmt.Errorf("assertion providers exceed 200 results"))
+		}
+	}
+	return HostExecutionResult{Success: true, Data: results, TimeMS: elapsedMS(started)}
+}
+
+func (s *hostServer) evaluateVariableProviders(operationID string, request EvaluateVariableProvidersRequest) HostExecutionResult {
+	started := time.Now()
+	runtime := s.runtimes[request.ExtensionID]
+	if runtime == nil {
+		return executionFailure(started, fmt.Errorf("extension is not active: %s", request.ExtensionID))
+	}
+	s.beginOperation(operationID, runtime.vm)
+	defer s.finishOperation(operationID)
+	providerIDs := make([]string, 0, len(runtime.variableProviders))
+	for id := range runtime.variableProviders {
+		providerIDs = append(providerIDs, id)
+	}
+	sort.Strings(providerIDs)
+	results := make([]VariableProviderResult, 0, len(providerIDs))
+	for _, providerID := range providerIDs {
+		handler := runtime.variableProviders[providerID]
+		var values map[string]string
+		err := runWithTimeout(runtime.vm, 10*time.Second, func() error {
+			value, err := handler(goja.Undefined(), runtime.vm.ToValue(request.Context))
+			if err != nil {
+				return err
+			}
+			if promise, ok := value.Export().(*goja.Promise); ok {
+				if promise.State() == goja.PromiseStateRejected {
+					return fmt.Errorf("%s", promise.Result().String())
+				}
+				if promise.State() == goja.PromiseStatePending {
+					return fmt.Errorf("variable provider returned a pending promise")
+				}
+				value = promise.Result()
+			}
+			if goja.IsUndefined(value) || goja.IsNull(value) {
+				values = map[string]string{}
+				return nil
+			}
+			data, err := json.Marshal(value.Export())
+			if err != nil || len(data) > maxStateValueBytes {
+				return fmt.Errorf("variable provider returned invalid or oversized data")
+			}
+			if err := json.Unmarshal(data, &values); err != nil {
+				return fmt.Errorf("variable provider must return a string map: %w", err)
+			}
+			return nil
+		})
+		if err != nil {
+			return executionFailure(started, fmt.Errorf("variable provider %s failed: %w", providerID, err))
+		}
+		results = append(results, VariableProviderResult{ProviderID: providerID, Values: values})
+	}
+	return HostExecutionResult{Success: true, Data: results, TimeMS: elapsedMS(started)}
 }
 
 func (s *hostServer) deactivate(operationID, extensionID string) error {
@@ -468,7 +607,7 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 	_ = events.Set("on", func(call goja.FunctionCall) goja.Value {
 		return registerEvent(call.Argument(0).String(), call.Argument(1))
 	})
-	for method, event := range map[string]string{"onRequest": "onRequest", "onResponse": "onResponse", "onSend": "onSend", "onSave": "onSave", "onImport": "onImport", "onExport": "onExport", "onThemeChange": "onThemeChange", "onEnvironmentChange": "onEnvChange", "onTabOpen": "onTabOpen", "onTabClose": "onTabClose", "onWorkspaceOpen": "onWorkspaceOpen", "onWorkspaceClose": "onWorkspaceClose"} {
+	for method, event := range map[string]string{"onRequest": "onRequest", "onResponse": "onResponse", "onSend": "onSend", "onSave": "onSave", "onImport": "onImport", "onExport": "onExport", "onThemeChange": "onThemeChange", "onEnvironmentChange": "onEnvChange", "onTabOpen": "onTabOpen", "onTabClose": "onTabClose", "onWorkspaceOpen": "onWorkspaceOpen", "onWorkspaceClose": "onWorkspaceClose", "onBrowserNetwork": "onBrowserNetwork", "onMockHit": "onMockHit", "onProxyTraffic": "onProxyTraffic"} {
 		eventName := event
 		_ = events.Set(method, func(call goja.FunctionCall) goja.Value { return registerEvent(eventName, call.Argument(0)) })
 	}
@@ -510,6 +649,32 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 	})
 	_ = api.Set("responses", responses)
 
+	assertions := vm.NewObject()
+	_ = assertions.Set("registerProvider", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "assertions.provide") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: assertions.provide")))
+		}
+		if !manifestHasActivation(runtime.manifest, "onAssertions") {
+			panic(vm.NewGoError(fmt.Errorf("assertion providers require onAssertions activation")))
+		}
+		id := call.Argument(0).String()
+		if !contributionIDPattern.MatchString(id) || !strings.HasPrefix(id, runtime.manifest.ID+".") {
+			panic(vm.NewGoError(fmt.Errorf("assertion provider id is not owned by extension: %s", id)))
+		}
+		handler, ok := goja.AssertFunction(call.Argument(1))
+		if !ok {
+			panic(vm.NewGoError(fmt.Errorf("assertion provider handler must be a function")))
+		}
+		runtime.assertionProviders[id] = handler
+		disposable := vm.NewObject()
+		_ = disposable.Set("dispose", func(goja.FunctionCall) goja.Value {
+			delete(runtime.assertionProviders, id)
+			return goja.Undefined()
+		})
+		return disposable
+	})
+	_ = api.Set("assertions", assertions)
+
 	variables := vm.NewObject()
 	_ = variables.Set("getAll", func(goja.FunctionCall) goja.Value {
 		if !hasPermission(runtime.manifest.Permissions, "variables.read") {
@@ -520,6 +685,29 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 			panic(vm.NewGoError(err))
 		}
 		return vm.ToValue(result)
+	})
+	_ = variables.Set("registerProvider", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "variables.provide") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: variables.provide")))
+		}
+		if !manifestHasActivation(runtime.manifest, "onVariables") {
+			panic(vm.NewGoError(fmt.Errorf("variable providers require onVariables activation")))
+		}
+		id := call.Argument(0).String()
+		if !contributionIDPattern.MatchString(id) || !strings.HasPrefix(id, runtime.manifest.ID+".") {
+			panic(vm.NewGoError(fmt.Errorf("variable provider id is not owned by extension: %s", id)))
+		}
+		handler, ok := goja.AssertFunction(call.Argument(1))
+		if !ok {
+			panic(vm.NewGoError(fmt.Errorf("variable provider handler must be a function")))
+		}
+		runtime.variableProviders[id] = handler
+		disposable := vm.NewObject()
+		_ = disposable.Set("dispose", func(goja.FunctionCall) goja.Value {
+			delete(runtime.variableProviders, id)
+			return goja.Undefined()
+		})
+		return disposable
 	})
 	_ = variables.Set("resolve", func(call goja.FunctionCall) goja.Value {
 		if !hasPermission(runtime.manifest.Permissions, "variables.read") {
@@ -532,6 +720,68 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 		return vm.ToValue(result)
 	})
 	_ = api.Set("variables", variables)
+
+	mockAPI := vm.NewObject()
+	_ = mockAPI.Set("getSnapshot", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "mock.read") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: mock.read")))
+		}
+		result, err := s.hostCall("mock.getSnapshot", map[string]any{"extensionId": runtime.manifest.ID})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = mockAPI.Set("clearHits", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "mock.control") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: mock.control")))
+		}
+		if _, err := s.hostCall("mock.clearHits", map[string]any{"extensionId": runtime.manifest.ID}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = mockAPI.Set("stop", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "mock.control") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: mock.control")))
+		}
+		if _, err := s.hostCall("mock.stop", map[string]any{"extensionId": runtime.manifest.ID}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = api.Set("mock", mockAPI)
+
+	proxyAPI := vm.NewObject()
+	_ = proxyAPI.Set("getSnapshot", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "proxy.read") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: proxy.read")))
+		}
+		result, err := s.hostCall("proxy.getSnapshot", map[string]any{"extensionId": runtime.manifest.ID})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = proxyAPI.Set("clearTraffic", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "proxy.control") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: proxy.control")))
+		}
+		if _, err := s.hostCall("proxy.clearTraffic", map[string]any{"extensionId": runtime.manifest.ID}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = proxyAPI.Set("stop", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "proxy.control") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: proxy.control")))
+		}
+		if _, err := s.hostCall("proxy.stop", map[string]any{"extensionId": runtime.manifest.ID}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = api.Set("proxy", proxyAPI)
 
 	diagnostics := vm.NewObject()
 	_ = diagnostics.Set("set", func(call goja.FunctionCall) goja.Value {
@@ -558,6 +808,7 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 		"collections":  "collections.read",
 		"tabs":         "tabs.read",
 		"workspace":    "workspace.read",
+		"browserDebug": "browserDebug.read",
 	} {
 		domainName, requiredPermission := domain, permission
 		domainAPI := vm.NewObject()
@@ -604,6 +855,9 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 			}))
 			_ = domainAPI.Set("close", action("tabs.write", "close", func(call goja.FunctionCall) map[string]any { return map[string]any{"id": call.Argument(0).String()} }))
 			_ = domainAPI.Set("setActive", action("tabs.write", "setActive", func(call goja.FunctionCall) map[string]any { return map[string]any{"id": call.Argument(0).String()} }))
+		case "browserDebug":
+			_ = domainAPI.Set("clear", action("browserDebug.control", "clear", func(goja.FunctionCall) map[string]any { return map[string]any{} }))
+			_ = domainAPI.Set("select", action("browserDebug.control", "select", func(call goja.FunctionCall) map[string]any { return map[string]any{"id": call.Argument(0).Export()} }))
 		}
 		_ = api.Set(domain, domainAPI)
 	}
@@ -701,6 +955,39 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 		})
 		_ = api.Set(scope+"State", state)
 	}
+
+	secrets := vm.NewObject()
+	_ = secrets.Set("get", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "secrets.own") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: secrets.own")))
+		}
+		result, err := s.hostCall("secrets.get", map[string]any{"extensionId": runtime.manifest.ID, "key": call.Argument(0).String(), "fallback": call.Argument(1).Export()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = secrets.Set("set", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "secrets.own") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: secrets.own")))
+		}
+		_, err := s.hostCall("secrets.set", map[string]any{"extensionId": runtime.manifest.ID, "key": call.Argument(0).String(), "value": call.Argument(1).String()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = secrets.Set("delete", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "secrets.own") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: secrets.own")))
+		}
+		_, err := s.hostCall("secrets.delete", map[string]any{"extensionId": runtime.manifest.ID, "key": call.Argument(0).String()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = api.Set("secrets", secrets)
 
 	logging := vm.NewObject()
 	for _, level := range []string{"debug", "info", "warn", "error"} {
@@ -847,6 +1134,16 @@ func eventPermission(event string) string {
 		return "tabs.read"
 	case "onWorkspaceOpen", "onWorkspaceClose":
 		return "workspace.read"
+	case "onAssertions":
+		return "assertions.provide"
+	case "onVariables":
+		return "variables.provide"
+	case "onBrowserNetwork":
+		return "browserDebug.read"
+	case "onMockHit":
+		return "mock.read"
+	case "onProxyTraffic":
+		return "proxy.read"
 	default:
 		return ""
 	}

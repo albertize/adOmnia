@@ -77,6 +77,7 @@ export const FEATURE_REGISTRY: FeatureDef[] = [
   { id: 'themes', title: 'Themes', group: 'Workspace', keywords: 'theme skin appearance colors design', maturity: 'advanced' },
   { id: 'templates', title: 'Templates', group: 'Workspace', keywords: 'templates snippets reusable workspace', maturity: 'advanced' },
   { id: 'plugins', title: 'Plugins', group: 'Workspace', keywords: 'extensions wasm js plugins', maturity: 'advanced' },
+  { id: 'extensionviews', title: 'Extension Views', group: 'Workspace', keywords: 'extension contributed views panels', maturity: 'core' },
   { id: 'settings', title: 'Settings', group: 'Navigation', keywords: 'preferences configuration appearance', maturity: 'core' },
 ]
 
@@ -122,6 +123,11 @@ export const RAIL_CATEGORIES: FeatureRailCategory[] = [
     groups: [
       { title: 'Focused Tools', items: ['jsonviewer', 'loginspector', 'powertools'].map((id) => ({ id: id as RailItem })) },
     ],
+  },
+  {
+    key: 'extensions', label: 'Extensions', code: 'EXT',
+    directItem: 'extensionviews',
+    groups: [{ title: 'Extensions', items: [{ id: 'extensionviews' }] }],
   },
   {
     key: 'workspace', label: 'Workspace', code: 'WORK',

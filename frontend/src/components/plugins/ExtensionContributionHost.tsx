@@ -5,7 +5,8 @@ import { useTabsStore } from '@/stores/tabs'
 import { useCollectionsStore } from '@/stores/collections'
 import { useEnvironmentsStore } from '@/stores/environments'
 import { useSettingsStore } from '@/stores/settings'
-import { setExtensionDomainContext } from '@/lib/extensions-v2-api'
+import { useBrowserDebugStore } from '@/stores/browser-debug'
+import { evaluateExtensionVariableProviders, setExtensionDomainContext } from '@/lib/extensions-v2-api'
 import { evaluateWhen, type ExtensionContextValues } from '@/lib/extensionContext'
 import type { Collection, RequestItem } from '@/lib/types'
 
@@ -21,6 +22,9 @@ export function ExtensionContributionHost() {
   const environments = useEnvironmentsStore((state) => state.environments)
   const activeEnvId = useEnvironmentsStore((state) => state.activeEnvId)
   const appearance = useSettingsStore((state) => state.settings.appearance)
+  const browserConnected = useBrowserDebugStore((state) => state.connected)
+  const browserEntries = useBrowserDebugStore((state) => state.entries)
+  const selectedBrowserEntry = useBrowserDebugStore((state) => state.selectedEntry)
   const activeTab = tabs.find((tab) => tab.id === activeTabId)
   const activeResponse = activeTab?.response
 
@@ -36,6 +40,7 @@ export function ExtensionContributionHost() {
   }, [activeRail, activeResponse, extensions])
 
   useEffect(() => {
+    let cancelled = false
     const timer = window.setTimeout(() => {
       const activeEnvironment = environments.find((environment) => environment.id === activeEnvId) ?? null
       const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
@@ -48,10 +53,25 @@ export function ExtensionContributionHost() {
         request: activeTab?.request ?? null,
         response: activeResponse ?? null,
         theme: { id: appearance.themeId, mode: appearance.theme },
-      }).catch(() => undefined)
+        browserDebug: { active: selectedBrowserEntry, items: browserEntries.slice(-500), connected: browserConnected },
+      }).then(() => evaluateExtensionVariableProviders({
+        environment: activeEnvironment ? { id: activeEnvironment.id, name: activeEnvironment.name } : null,
+        workspace: activeWorkspace ? { id: activeWorkspace.id, name: activeWorkspace.name } : null,
+      })).then((providers) => {
+        if (cancelled) return
+        const values: Record<string, string> = {}
+        for (const provider of providers.sort((left, right) => `${left.extensionId}:${left.providerId}`.localeCompare(`${right.extensionId}:${right.providerId}`))) {
+          Object.assign(values, provider.values)
+        }
+        useEnvironmentsStore.getState().setExtensionVariables(values)
+      }).catch((error: unknown) => {
+        if (cancelled) return
+        useEnvironmentsStore.getState().setExtensionVariables({})
+        window.dispatchEvent(new CustomEvent('adomnia:extension-error', { detail: error instanceof Error ? error.message : String(error) }))
+      })
     }, 100)
-    return () => window.clearTimeout(timer)
-  }, [activeEnvId, activeResponse, activeTab, activeWorkspaceId, appearance, collections, environments, tabs, workspaces])
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [activeEnvId, activeResponse, activeTab, activeWorkspaceId, appearance, browserConnected, browserEntries, collections, environments, extensions, selectedBrowserEntry, tabs, workspaces])
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
@@ -87,6 +107,17 @@ export function ExtensionContributionHost() {
             if (typeof id !== 'string' || !useTabsStore.getState().tabs.some((item) => item.id === id)) throw new Error('tab not found')
             if (message.action === 'close') useTabsStore.getState().closeTab(id)
             else useTabsStore.getState().setActiveTab(id)
+          } else if (message.domain === 'browserDebug' && message.action === 'clear') {
+            useBrowserDebugStore.getState().clearEntries()
+          } else if (message.domain === 'browserDebug' && message.action === 'select') {
+            const id = message.payload.id
+            if (id === null) useBrowserDebugStore.getState().setSelectedEntry(null)
+            else {
+              if (typeof id !== 'string') throw new Error('invalid browser network entry ID')
+              const entry = useBrowserDebugStore.getState().entries.find((item) => item.id === id)
+              if (!entry) throw new Error('browser network entry not found')
+              useBrowserDebugStore.getState().setSelectedEntry(entry)
+            }
           }
         } catch (error) {
           window.dispatchEvent(new CustomEvent('adomnia:extension-error', { detail: `${message.extensionId}: ${error instanceof Error ? error.message : String(error)}` }))

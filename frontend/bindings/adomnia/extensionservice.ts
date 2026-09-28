@@ -35,9 +35,21 @@ export function Enable(id: string): $CancellablePromise<extensions$0.ExtensionIn
     });
 }
 
+export function EvaluateAssertions(payloadJSON: string): $CancellablePromise<extensions$0.AssertionProviderResult[]> {
+    return $Call.ByID(2942507778, payloadJSON).then(($result: any) => {
+        return $$createType4($result);
+    });
+}
+
+export function EvaluateVariableProviders(contextJSON: string): $CancellablePromise<extensions$0.VariableProviderResult[]> {
+    return $Call.ByID(1535773775, contextJSON).then(($result: any) => {
+        return $$createType6($result);
+    });
+}
+
 export function ExecuteCommand(extensionID: string, commandID: string, argsJSON: string, source: string): $CancellablePromise<extensions$0.HostExecutionResult> {
     return $Call.ByID(1904810740, extensionID, commandID, argsJSON, source).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType7($result);
     });
 }
 
@@ -47,25 +59,25 @@ export function ExportSDK(destination: string): $CancellablePromise<string> {
 
 export function GetDiagnostics(extensionID: string): $CancellablePromise<extensions$0.ExtensionDiagnostic[]> {
     return $Call.ByID(2200303080, extensionID).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType9($result);
     });
 }
 
 export function GetExtensions(): $CancellablePromise<extensions$0.ExtensionInstance[]> {
     return $Call.ByID(2859212398).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType10($result);
     });
 }
 
 export function GetLogs(extensionID: string): $CancellablePromise<extensions$0.ExtensionLog[]> {
     return $Call.ByID(905320927, extensionID).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType12($result);
     });
 }
 
 export function GetRuntimeStatus(): $CancellablePromise<extensions$0.RuntimeStatus> {
     return $Call.ByID(1574664858).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType13($result);
     });
 }
 
@@ -131,10 +143,14 @@ export function Uninstall(id: string): $CancellablePromise<void> {
 const $$createType0 = extensions$0.Manifest.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = extensions$0.ExtensionInstance.createFrom;
-const $$createType3 = extensions$0.HostExecutionResult.createFrom;
-const $$createType4 = extensions$0.ExtensionDiagnostic.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $Create.Array($$createType2);
-const $$createType7 = extensions$0.ExtensionLog.createFrom;
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = extensions$0.RuntimeStatus.createFrom;
+const $$createType3 = extensions$0.AssertionProviderResult.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = extensions$0.VariableProviderResult.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = extensions$0.HostExecutionResult.createFrom;
+const $$createType8 = extensions$0.ExtensionDiagnostic.createFrom;
+const $$createType9 = $Create.Array($$createType8);
+const $$createType10 = $Create.Array($$createType2);
+const $$createType11 = extensions$0.ExtensionLog.createFrom;
+const $$createType12 = $Create.Array($$createType11);
+const $$createType13 = extensions$0.RuntimeStatus.createFrom;

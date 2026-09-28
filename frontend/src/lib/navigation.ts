@@ -27,6 +27,7 @@ export const RAIL_ITEMS = [
   'themes',
   'templates',
   'plugins',
+  'extensionviews',
   'har',
   'observe',
   'secretscanner',

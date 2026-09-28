@@ -1,0 +1,16 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.proxy-monitor-example",
+  "name": "Proxy Monitor Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Summarizes redacted traffic from the local proxy interceptor.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onProxyTraffic", "onView:adomnia.proxy-monitor-example.traffic"],
+  "permissions": ["proxy.read"],
+  "contributes": { "views": [{ "id": "adomnia.proxy-monitor-example.traffic", "container": "proxy-analysis", "name": "Proxy Traffic", "renderer": "declarative" }] }
+}

@@ -17,6 +17,7 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 
 	var mu sync.Mutex
 	state := map[string]interface{}{}
+	secrets := map[string]string{}
 	notifications := []string{}
 	handler := func(_ context.Context, method string, raw json.RawMessage) (interface{}, error) {
 		var params map[string]interface{}
@@ -35,11 +36,28 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 		case "state.delete":
 			delete(state, params["key"].(string))
 			return map[string]bool{"ok": true}, nil
+		case "secrets.get":
+			if value, ok := secrets[params["key"].(string)]; ok {
+				return value, nil
+			}
+			return params["fallback"], nil
+		case "secrets.set":
+			secrets[params["key"].(string)] = params["value"].(string)
+			return map[string]bool{"ok": true}, nil
+		case "secrets.delete":
+			delete(secrets, params["key"].(string))
+			return map[string]bool{"ok": true}, nil
 		case "window.notify":
 			notifications = append(notifications, params["message"].(string))
 			return map[string]bool{"ok": true}, nil
 		case "domains.get":
 			return []map[string]any{{"id": "collection-1"}}, nil
+		case "mock.getSnapshot":
+			return map[string]any{"running": false, "hits": []any{}}, nil
+		case "proxy.getSnapshot":
+			return map[string]any{"running": false, "entries": []any{}}, nil
+		case "mock.clearHits", "mock.stop", "proxy.clearTraffic", "proxy.stop":
+			return map[string]bool{"ok": true}, nil
 		case "variables.getAll":
 			return map[string]string{"baseUrl": "https://example.test"}, nil
 		case "variables.resolve":
@@ -61,18 +79,34 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 		t.Fatalf("initialize error = %v", err)
 	}
 	manifest := validTestManifest()
-	manifest.Permissions = []string{"notifications", "globalState", "responses.read", "collections.read", "variables.read"}
-	manifest.ActivationEvents = append(manifest.ActivationEvents, "onResponse")
+	manifest.Permissions = []string{"notifications", "globalState", "secrets.own", "responses.read", "collections.read", "variables.read", "variables.provide", "assertions.provide", "browserDebug.read", "browserDebug.control", "mock.read", "mock.control", "proxy.read", "proxy.control"}
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onResponse", "onAssertions", "onVariables", "onBrowserNetwork", "onMockHit", "onProxyTraffic")
 	source := `
 		export async function activate(api) {
 			api.context.subscriptions.add(api.commands.registerCommand("test.extension.run", async () => {
 				const count = await api.globalState.get("count", 0)
 				await api.globalState.set("count", count + 1)
 				await api.window.notify("ran", "success")
+				await api.secrets.set("token", "local-secret")
+				const secret = await api.secrets.get("token")
 				const collections = await api.collections.list()
+				const browserEntries = await api.browserDebug.list()
+				await api.browserDebug.clear()
+				const mockSnapshot = await api.mock.getSnapshot()
+				const proxySnapshot = await api.proxy.getSnapshot()
+				await api.mock.clearHits()
+				await api.proxy.clearTraffic()
 				const resolved = await api.variables.resolve('{{baseUrl}}/users')
-				return { count: count + 1, collectionCount: collections.length, resolved }
+				return { count: count + 1, collectionCount: collections.length, browserCount: browserEntries.length, mockRunning: mockSnapshot.running, proxyRunning: proxySnapshot.running, resolved, secret }
 			}))
+			api.context.subscriptions.add(api.variables.registerProvider('test.extension.dynamic', (context) => ({ providedUrl: context.url })))
+			api.context.subscriptions.add(api.assertions.registerProvider('test.extension.status', (payload) => ({
+				label: 'Status is successful', passed: payload.response.status < 400,
+				actual: String(payload.response.status), expected: '< 400'
+			})))
+			api.events.onBrowserNetwork(() => undefined)
+			api.events.onMockHit(() => undefined)
+			api.events.onProxyTraffic(() => undefined)
 			api.context.subscriptions.add(api.events.onResponse((payload) => {
 				payload.tagged = true
 				return { modified: true, data: payload }
@@ -88,7 +122,7 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 		t.Fatalf("command result=%#v err=%v", command, err)
 	}
 	data := command.Data.(map[string]interface{})
-	if data["count"] != float64(1) || data["collectionCount"] != int64(1) && data["collectionCount"] != float64(1) || data["resolved"] != "https://example.test/users" {
+	if data["count"] != float64(1) || data["collectionCount"] != int64(1) && data["collectionCount"] != float64(1) || data["browserCount"] != int64(1) && data["browserCount"] != float64(1) || data["mockRunning"] != false || data["proxyRunning"] != false || data["resolved"] != "https://example.test/users" || data["secret"] != "local-secret" {
 		t.Fatalf("command data = %#v", data)
 	}
 	var event HostExecutionResult
@@ -99,9 +133,27 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 	if eventData["tagged"] != true {
 		t.Fatalf("event data = %#v", eventData)
 	}
+	var variableResults HostExecutionResult
+	if err := client.Request(ctx, "evaluateVariableProviders", EvaluateVariableProvidersRequest{ExtensionID: manifest.ID, Context: map[string]any{"url": "https://provided.test"}}, &variableResults); err != nil || !variableResults.Success {
+		t.Fatalf("variable providers result=%#v err=%v", variableResults, err)
+	}
+	encodedVariables, _ := json.Marshal(variableResults.Data)
+	var provided []VariableProviderResult
+	if err := json.Unmarshal(encodedVariables, &provided); err != nil || len(provided) != 1 || provided[0].Values["providedUrl"] != "https://provided.test" || provided[0].ProviderID != "test.extension.dynamic" {
+		t.Fatalf("variable provider results=%#v err=%v", provided, err)
+	}
+	var providerResults HostExecutionResult
+	if err := client.Request(ctx, "evaluateAssertions", EvaluateAssertionsRequest{ExtensionID: manifest.ID, Payload: map[string]any{"response": map[string]any{"status": 204}}}, &providerResults); err != nil || !providerResults.Success {
+		t.Fatalf("assertion providers result=%#v err=%v", providerResults, err)
+	}
+	encodedResults, _ := json.Marshal(providerResults.Data)
+	var assertions []AssertionProviderResult
+	if err := json.Unmarshal(encodedResults, &assertions); err != nil || len(assertions) != 1 || !assertions[0].Passed || assertions[0].ProviderID != "test.extension.status" {
+		t.Fatalf("assertion provider results=%#v err=%v", assertions, err)
+	}
 	mu.Lock()
-	if state["count"] != float64(1) || len(notifications) != 1 || notifications[0] != "ran" {
-		t.Fatalf("state=%#v notifications=%#v", state, notifications)
+	if state["count"] != float64(1) || secrets["token"] != "local-secret" || len(notifications) != 1 || notifications[0] != "ran" {
+		t.Fatalf("state=%#v secrets=%#v notifications=%#v", state, secrets, notifications)
 	}
 	mu.Unlock()
 

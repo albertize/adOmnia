@@ -32,4 +32,6 @@ A valid report has `valid: true` and no error diagnostics. Treat warnings as rev
 - `README.md` explains the user workflow.
 - `AGENTS.md` points maintainers to the version-matched SDK.
 
+Core maintainers can run the local, non-telemetric performance harness documented in `docs/extensions/PERFORMANCE.md` in the source repository. Production-platform measurements remain release work.
+
 The test command starts the real isolated extension-host protocol and reports activation, command/event results, notifications, view state, and local test state as JSON. It does not replace a final Wails desktop interaction check for menus, keyboard focus, themes, or webviews.

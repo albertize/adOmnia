@@ -10,10 +10,12 @@ The first foundation slice is available in source:
 - embedded esbuild for JavaScript/TypeScript, deterministic `.adomnia-extension` creation;
 - JSON-capable `init`, `build`, `check`, `test`, `pack`, `install`, `list`, `inspect`, `doctor`, and `sdk` CLI;
 - authenticated out-of-process goja host with lazy activation, commands, events, state, timeout and quarantine;
-- permission review, command palette, keybindings, status items, settings, declarative views and sandboxed webviews;
+- permission review, command palette, keybindings, status items, settings, rail/response declarative views and sandboxed webviews;
+- brokered workbench domains, variable/assertion providers, and Vault-encrypted extension-owned secrets;
+- local performance harness documented in [`PERFORMANCE.md`](PERFORMANCE.md);
 - embedded Markdown SDK, declarations, schemas, templates and Agent Skill.
 
-The v1 plugin runtime remains available through a separate compatibility path. HTTP request/response hooks are connected in v2; consult the SDK event table for reserved events that still lack a core producer.
+The v1 plugin runtime remains available through a separate compatibility path. HTTP request/response and documented core workbench events are connected in v2; consult the SDK API and event tables for the remaining reserved advanced domain namespaces.
 
 ## Authoring documentation
 

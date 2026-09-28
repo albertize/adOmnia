@@ -47,6 +47,9 @@ export interface EventsAPI {
   onTabClose(handler: EventHandler): Disposable
   onWorkspaceOpen(handler: EventHandler): Disposable
   onWorkspaceClose(handler: EventHandler): Disposable
+  onBrowserNetwork(handler: EventHandler): Disposable
+  onMockHit(handler: EventHandler): Disposable
+  onProxyTraffic(handler: EventHandler): Disposable
 }
 
 export interface DeclarativeViewState {
@@ -76,6 +79,25 @@ export interface RequestsAPI {
 export interface VariablesAPI {
   getAll(): Promise<Readonly<Record<string, string>>>
   resolve(value: string): Promise<string>
+  registerProvider(
+    id: string,
+    handler: (context: Record<string, unknown>) => Readonly<Record<string, string>> | Promise<Readonly<Record<string, string>>>,
+  ): Disposable
+}
+
+export interface AssertionProviderResult {
+  label: string
+  passed: boolean
+  actual?: string
+  expected?: string
+  message?: string
+}
+
+export interface AssertionsAPI {
+  registerProvider(
+    id: string,
+    handler: (payload: Record<string, unknown>) => AssertionProviderResult | readonly AssertionProviderResult[] | Promise<AssertionProviderResult | readonly AssertionProviderResult[]>,
+  ): Disposable
 }
 
 export interface ResponsesAPI {
@@ -119,6 +141,23 @@ export interface TabsAPI<T = Record<string, unknown>> extends ReadDomainAPI<T> {
   setActive(id: string): Promise<void>
 }
 
+export interface MockAPI {
+  getSnapshot<T = Record<string, unknown>>(): Promise<T>
+  clearHits(): Promise<void>
+  stop(): Promise<void>
+}
+
+export interface ProxyAPI {
+  getSnapshot<T = Record<string, unknown>>(): Promise<T>
+  clearTraffic(): Promise<void>
+  stop(): Promise<void>
+}
+
+export interface BrowserDebugAPI<T = Record<string, unknown>> extends ReadDomainAPI<T> {
+  clear(): Promise<void>
+  select(id: string | null): Promise<void>
+}
+
 export interface ViewsAPI {
   setState(viewId: string, state: DeclarativeViewState): Promise<void>
 }
@@ -131,6 +170,12 @@ export interface ConfigurationAPI {
 export interface KeyValueState {
   get<T>(key: string, fallback?: T): Promise<T>
   set(key: string, value: unknown): Promise<void>
+  delete(key: string): Promise<void>
+}
+
+export interface SecretsAPI {
+  get(key: string, fallback?: string): Promise<string | undefined>
+  set(key: string, value: string): Promise<void>
   delete(key: string): Promise<void>
 }
 
@@ -152,16 +197,21 @@ export interface ExtensionAPI {
   readonly requests: RequestsAPI
   readonly responses: ResponsesAPI
   readonly variables: VariablesAPI
+  readonly assertions: AssertionsAPI
   readonly environments: EnvironmentsAPI
   readonly collections: CollectionsAPI
   readonly tabs: TabsAPI
   readonly workspace: ReadDomainAPI
+  readonly browserDebug: BrowserDebugAPI
+  readonly mock: MockAPI
+  readonly proxy: ProxyAPI
   readonly diagnostics: DiagnosticsAPI
   readonly progress: ProgressAPI
   readonly views: ViewsAPI
   readonly configuration: ConfigurationAPI
   readonly globalState: KeyValueState
   readonly workspaceState: KeyValueState
+  readonly secrets: SecretsAPI
   readonly logging: LoggingAPI
   readonly window: WindowAPI
 }

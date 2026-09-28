@@ -277,6 +277,38 @@ func TestPluginPackageExecutesActionAndTransformsRequestHook(t *testing.T) {
 	}
 }
 
+func TestBundledRequestAdvisorFixtureRemainsCompatibleUnchanged(t *testing.T) {
+	manager, _ := newTestPluginManager(t)
+	fixture, err := filepath.Abs(filepath.Join("..", "..", "workspaces", "plugins", "request-advisor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := manager.InstallPluginDirectory(fixture)
+	if err != nil {
+		t.Fatalf("install unchanged fixture: %v", err)
+	}
+	if err := manager.EnablePlugin(plugin.Manifest.ID); err != nil {
+		t.Fatalf("enable unchanged fixture: %v", err)
+	}
+	transformed, err := manager.ApplyEventJSON("onRequest", `{"method":"GET","url":"localhost:8080/health","headers":{},"body":""}`)
+	if err != nil {
+		t.Fatalf("run fixture hook: %v", err)
+	}
+	var request map[string]interface{}
+	if err := json.Unmarshal([]byte(transformed), &request); err != nil {
+		t.Fatal(err)
+	}
+	if request["url"] != "http://localhost:8080/health" || request["headers"].(map[string]interface{})["X-Adomnia-Plugin"] != "active" {
+		t.Fatalf("unexpected fixture transform: %#v", request)
+	}
+	ConfigureNotifier(func(PluginNotification) {})
+	t.Cleanup(func() { ConfigureNotifier(nil) })
+	result := manager.ExecuteAction("request-advisor", "inspect", map[string]interface{}{})
+	if !result.Success {
+		t.Fatalf("fixture action failed: %s", result.Error)
+	}
+}
+
 func TestPluginRuntimeEnforcesPermissionAndTimeout(t *testing.T) {
 	manager, _ := newTestPluginManager(t)
 	manifestJSON := `{

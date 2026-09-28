@@ -65,6 +65,32 @@ type DispatchEventRequest struct {
 	Payload     map[string]any `json:"payload"`
 }
 
+type EvaluateAssertionsRequest struct {
+	ExtensionID string         `json:"extensionId"`
+	Payload     map[string]any `json:"payload"`
+}
+
+type AssertionProviderResult struct {
+	ExtensionID string `json:"extensionId,omitempty"`
+	ProviderID  string `json:"providerId"`
+	Label       string `json:"label"`
+	Passed      bool   `json:"passed"`
+	Actual      string `json:"actual,omitempty"`
+	Expected    string `json:"expected,omitempty"`
+	Message     string `json:"message,omitempty"`
+}
+
+type EvaluateVariableProvidersRequest struct {
+	ExtensionID string         `json:"extensionId"`
+	Context     map[string]any `json:"context"`
+}
+
+type VariableProviderResult struct {
+	ExtensionID string            `json:"extensionId,omitempty"`
+	ProviderID  string            `json:"providerId"`
+	Values      map[string]string `json:"values"`
+}
+
 type DeactivateHostRequest struct {
 	ExtensionID string `json:"extensionId"`
 }

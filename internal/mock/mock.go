@@ -719,6 +719,7 @@ func recordHitDetailed(method, path string, matched bool, responseID string, sta
 	if logToFile {
 		appendHitToFile(entry)
 	}
+	notifyExtensionObserver(entry)
 }
 
 // RegisterHandlers registers HTTP and WebSocket mock server endpoints.

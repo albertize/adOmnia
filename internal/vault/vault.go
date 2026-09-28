@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -21,11 +22,12 @@ import (
 )
 
 var (
-	vaultMu       sync.RWMutex
-	vaultUnlocked bool
-	vaultIdentity age.Identity
-	vaultTimeout  = 30 * time.Minute
-	vaultTimer    *time.Timer
+	vaultMu        sync.RWMutex
+	vaultUnlocked  bool
+	vaultIdentity  age.Identity
+	vaultRecipient age.Recipient
+	vaultTimeout   = 30 * time.Minute
+	vaultTimer     *time.Timer
 )
 
 // TimeoutMinutes reports the configured inactivity timeout.
@@ -43,19 +45,82 @@ func resetVaultTimer() {
 		vaultTimer.Stop()
 	}
 	vaultTimer = time.AfterFunc(vaultTimeout, func() {
-		lockVault()
+		Lock()
 		log.Println("[vault] auto-locked after inactivity")
 	})
 }
 
-func lockVault() {
+// Lock clears all in-memory vault key material.
+func Lock() {
 	vaultMu.Lock()
 	defer vaultMu.Unlock()
 	vaultUnlocked = false
 	vaultIdentity = nil
+	vaultRecipient = nil
 	if vaultTimer != nil {
 		vaultTimer.Stop()
 	}
+}
+
+// Unlock derives in-memory encryption and decryption keys without retaining the passphrase.
+func Unlock(passphrase string) error {
+	if strings.TrimSpace(passphrase) == "" {
+		return errors.New("passphrase required")
+	}
+	identity, err := age.NewScryptIdentity(passphrase)
+	if err != nil {
+		return err
+	}
+	recipient, err := age.NewScryptRecipient(passphrase)
+	if err != nil {
+		return err
+	}
+	vaultMu.Lock()
+	vaultUnlocked = true
+	vaultIdentity = identity
+	vaultRecipient = recipient
+	vaultMu.Unlock()
+	resetVaultTimer()
+	return nil
+}
+
+// Seal encrypts a value with the currently unlocked vault key.
+func Seal(plaintext string) (string, error) {
+	vaultMu.RLock()
+	unlocked, recipient := vaultUnlocked, vaultRecipient
+	vaultMu.RUnlock()
+	if !unlocked || recipient == nil {
+		return "", errors.New("vault is locked")
+	}
+	var buf bytes.Buffer
+	writer, err := age.Encrypt(&buf, recipient)
+	if err != nil {
+		return "", err
+	}
+	if _, err := writer.Write([]byte(plaintext)); err != nil {
+		return "", err
+	}
+	if err := writer.Close(); err != nil {
+		return "", err
+	}
+	resetVaultTimer()
+	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
+// Open decrypts a value with the currently unlocked vault key.
+func Open(ciphertext string) (string, error) {
+	vaultMu.RLock()
+	unlocked, identity := vaultUnlocked, vaultIdentity
+	vaultMu.RUnlock()
+	if !unlocked || identity == nil {
+		return "", errors.New("vault is locked")
+	}
+	plaintext, err := decryptWithIdentity(ciphertext, identity)
+	if err != nil {
+		return "", err
+	}
+	resetVaultTimer()
+	return plaintext, nil
 }
 
 func encryptWithAge(plaintext, passphrase string) (string, error) {
@@ -148,19 +213,10 @@ func vaultUnlockHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Derive the identity from the passphrase via scrypt
-	identity, err := age.NewScryptIdentity(req.Passphrase)
-	if err != nil {
+	if err := Unlock(req.Passphrase); err != nil {
 		http.Error(w, "failed to derive key", http.StatusInternalServerError)
 		return
 	}
-
-	vaultMu.Lock()
-	vaultUnlocked = true
-	vaultIdentity = identity
-	vaultMu.Unlock()
-
-	resetVaultTimer()
 	log.Println("[vault] unlocked")
 
 	w.Header().Set("Content-Type", "application/json")
@@ -168,7 +224,7 @@ func vaultUnlockHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func vaultLockHandler(w http.ResponseWriter, r *http.Request) {
-	lockVault()
+	Lock()
 	log.Println("[vault] locked manually")
 
 	w.Header().Set("Content-Type", "application/json")

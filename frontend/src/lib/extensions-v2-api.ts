@@ -1,15 +1,17 @@
 import * as ExtensionBindings from '../../bindings/adomnia/extensionservice'
 import * as AppBindings from '../../bindings/adomnia/app'
 import type {
+  AssertionProviderResult,
   ExtensionDiagnostic,
   ExtensionInstance,
   ExtensionLog,
   HostExecutionResult,
   Manifest,
   RuntimeStatus,
+  VariableProviderResult,
 } from '../../bindings/adomnia/internal/extensions/models'
 
-export type { ExtensionDiagnostic, ExtensionInstance, ExtensionLog, HostExecutionResult, Manifest, RuntimeStatus }
+export type { AssertionProviderResult, ExtensionDiagnostic, ExtensionInstance, ExtensionLog, HostExecutionResult, Manifest, RuntimeStatus, VariableProviderResult }
 
 export const listExtensions = (): Promise<ExtensionInstance[]> => ExtensionBindings.GetExtensions()
 export const getExtensionLogs = (extensionId: string): Promise<ExtensionLog[]> => ExtensionBindings.GetLogs(extensionId)
@@ -41,6 +43,8 @@ export const getExtensionWebviewHTML = (extensionId: string, viewId: string): Pr
 export const setExtensionWorkspaceContext = (workspaceId: string): Promise<void> => ExtensionBindings.SetWorkspaceContext(workspaceId)
 export const setExtensionDomainContext = (context: Record<string, unknown>): Promise<void> => ExtensionBindings.SetDomainContext(JSON.stringify(context))
 export const notifyExtensionWorkbenchEvent = (event: 'onSave' | 'onImport' | 'onExport', payload: Record<string, unknown>): Promise<void> => ExtensionBindings.NotifyWorkbenchEvent(event, JSON.stringify(payload))
+export const evaluateExtensionAssertions = (payload: Record<string, unknown>): Promise<AssertionProviderResult[]> => ExtensionBindings.EvaluateAssertions(JSON.stringify(payload))
+export const evaluateExtensionVariableProviders = (context: Record<string, unknown>): Promise<VariableProviderResult[]> => ExtensionBindings.EvaluateVariableProviders(JSON.stringify(context))
 
 export const selectExtensionDirectory = (): Promise<string> => AppBindings.SelectFolder('Select adOmnia extension folder')
 export const selectExtensionArchive = (): Promise<string> => AppBindings.SelectExtensionArchive()

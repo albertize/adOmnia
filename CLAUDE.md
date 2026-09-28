@@ -214,7 +214,7 @@ The `@wailsio/runtime` npm version is **version-locked** to `github.com/wailsapp
 | Data/security | `internal/database`, `internal/storage`, `internal/vault`, `internal/oauth` |
 | Docker Lab | `internal/docker`, `frontend/src/lib/dockerlab-api.ts` |
 | Customization | `internal/themes`, `internal/plugins`, `internal/templates` |
-| Extension Platform v2 foundation | `internal/extensions`, `sdk/extensions`, `docs/extensions`; package contracts and CLI are implemented, runtime activation is not yet shipped |
+| Extension Platform v2 preview | `internal/extensions`, `sdk/extensions`, `docs/extensions`; package/CLI contracts, isolated runtime activation, permissions, contributions, declarative views, and sandboxed webviews are implemented; remaining GA gates are tracked in `docs/EXTENSION-PLATFORM-PLAN.md` |
 | Git Sync | `internal/git`, `git_bindings.go`, `git_bindings_ops.go` |
 
 **IPC:** Frontend calls backend through Wails generated bindings.  

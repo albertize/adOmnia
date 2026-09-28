@@ -30,6 +30,7 @@ export function ExtensionDeclarativeView({ extensionId, viewId, name }: Props) {
   const [formValues, setFormValues] = useState<Record<string, unknown>>({})
   const [actionResult, setActionResult] = useState('')
   const [busyAction, setBusyAction] = useState<string | null>(null)
+  const [treeFocusId, setTreeFocusId] = useState<string | null>(null)
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
@@ -42,6 +43,13 @@ export function ExtensionDeclarativeView({ extensionId, viewId, name }: Props) {
     })
     return () => unsubscribe?.()
   }, [extensionId, viewId])
+
+  useEffect(() => {
+    if (state?.kind === 'tree') {
+      const items = flattenTree(state.items ?? [])
+      if (!items.some(({ item }) => item.id === treeFocusId)) setTreeFocusId(items[0]?.item.id ?? null)
+    }
+  }, [state, treeFocusId])
 
   useEffect(() => {
     if (state?.kind !== 'form') return
@@ -60,8 +68,8 @@ export function ExtensionDeclarativeView({ extensionId, viewId, name }: Props) {
       <div className="overflow-hidden rounded border border-border-1 bg-surface-0">
         <div className="flex items-center gap-2 border-b border-border-1 px-3 py-2 text-[10px] font-medium text-text-2"><Table2 size={11} className="text-accent" /> {title}</div>
         <div className="max-h-64 overflow-auto">
-          <table className="w-full border-collapse text-left text-[10px]">
-            <thead className="sticky top-0 bg-surface-2 text-text-3"><tr>{columns.map((column) => <th key={column.key} className="border-b border-border-1 px-2 py-1.5 font-medium">{column.title}</th>)}</tr></thead>
+          <table aria-label={title} className="w-full border-collapse text-left text-[10px]">
+            <thead className="sticky top-0 bg-surface-2 text-text-3"><tr>{columns.map((column) => <th key={column.key} scope="col" className="border-b border-border-1 px-2 py-1.5 font-medium">{column.title}</th>)}</tr></thead>
             <tbody>{(state.rows ?? []).map((row, index) => <tr key={index} className="border-b border-border-1/60 last:border-0">{columns.map((column) => <td key={column.key} className="max-w-64 truncate px-2 py-1.5 text-text-2">{formatValue(row[column.key])}</td>)}</tr>)}</tbody>
           </table>
         </div>
@@ -73,8 +81,21 @@ export function ExtensionDeclarativeView({ extensionId, viewId, name }: Props) {
     return (
       <div className="overflow-hidden rounded border border-border-1 bg-surface-0">
         <div className="flex items-center gap-2 border-b border-border-1 px-3 py-2 text-[10px] font-medium text-text-2"><ListTree size={11} className="text-accent" /> {title}</div>
-        <div role="tree" className="max-h-64 overflow-auto py-1">{items.map(({ item, depth }) => (
-          <div key={item.id} role="treeitem" aria-level={depth + 1} className="flex items-start gap-2 px-3 py-1.5" style={{ paddingLeft: `${12 + depth * 16}px` }}>
+        <div role="tree" aria-label={title} className="max-h-64 overflow-auto py-1" onKeyDown={(event) => {
+          const current = items.findIndex(({ item }) => item.id === treeFocusId)
+          let next = current
+          if (event.key === 'ArrowDown') next = Math.min(items.length - 1, current + 1)
+          else if (event.key === 'ArrowUp') next = Math.max(0, current - 1)
+          else if (event.key === 'Home') next = 0
+          else if (event.key === 'End') next = items.length - 1
+          else return
+          event.preventDefault()
+          const id = items[next]?.item.id
+          if (!id) return
+          setTreeFocusId(id)
+          requestAnimationFrame(() => document.getElementById(treeDOMId(viewId, id))?.focus())
+        }}>{items.map(({ item, depth }) => (
+          <div key={item.id} id={treeDOMId(viewId, item.id)} role="treeitem" aria-level={depth + 1} tabIndex={item.id === treeFocusId ? 0 : -1} onFocus={() => setTreeFocusId(item.id)} className="flex items-start gap-2 px-3 py-1.5 outline-none focus:bg-accent/10" style={{ paddingLeft: `${12 + depth * 16}px` }}>
             <span aria-hidden className="mt-1 text-[8px] text-text-4">{depth > 0 ? '└' : '•'}</span>
             <div className="min-w-0 flex-1"><p className="text-[10px] text-text-1">{item.title}</p>{item.description && <p className="text-[9px] text-text-4">{item.description}</p>}</div>
             {item.badge && <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[8px] text-accent">{item.badge}</span>}
@@ -116,7 +137,17 @@ export function ExtensionDeclarativeView({ extensionId, viewId, name }: Props) {
     return (
       <div className="overflow-hidden rounded border border-border-1 bg-surface-0">
         <div className="flex items-center gap-2 border-b border-border-1 px-3 py-2 text-[10px] font-medium text-text-2"><List size={11} className="text-accent" /> {title}</div>
-        <div className="divide-y divide-border-1">{(state.items ?? []).map((item) => <div key={item.id} className="flex items-start gap-2 px-3 py-2"><div className="min-w-0 flex-1"><p className="text-[10px] text-text-1">{item.title}</p>{item.description && <p className="mt-0.5 text-[9px] text-text-4">{item.description}</p>}</div>{item.badge && <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[8px] text-accent">{item.badge}</span>}</div>)}</div>
+        <div role="list" aria-label={title} className="divide-y divide-border-1">{(state.items ?? []).map((item) => <div key={item.id} role="listitem" className="flex items-start gap-2 px-3 py-2"><div className="min-w-0 flex-1"><p className="text-[10px] text-text-1">{item.title}</p>{item.description && <p className="mt-0.5 text-[9px] text-text-4">{item.description}</p>}</div>{item.badge && <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[8px] text-accent">{item.badge}</span>}</div>)}</div>
+      </div>
+    )
+  }
+  if (state.kind === 'details') {
+    const entries = state.data && typeof state.data === 'object' && !Array.isArray(state.data) ? Object.entries(state.data as Record<string, unknown>) : []
+    return (
+      <div className="overflow-hidden rounded border border-border-1 bg-surface-0">
+        <div className="flex items-center gap-2 border-b border-border-1 px-3 py-2 text-[10px] font-medium text-text-2"><Braces size={11} className="text-accent" /> {title}</div>
+        <dl className="divide-y divide-border-1">{entries.map(([key, value]) => <div key={key} className="grid grid-cols-[minmax(8rem,0.35fr)_1fr] gap-3 px-3 py-2 text-[10px]"><dt className="font-medium text-text-3">{key}</dt><dd className="min-w-0 break-words text-text-1">{formatValue(value)}</dd></div>)}</dl>
+        {entries.length === 0 && <p className="px-3 py-4 text-[10px] text-text-4">{state.message ?? ''}</p>}
       </div>
     )
   }
@@ -148,6 +179,11 @@ function flattenTree(items: NonNullable<DeclarativeViewState['items']>): Array<{
   for (const item of byParent.get('') ?? []) visit(item, 0)
   for (const item of items) if (!visited.has(item.id)) visit(item, 0)
   return result
+}
+
+function treeDOMId(viewId: string, itemId: string): string {
+  const safe = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, '-')
+  return `extension-tree-${safe(viewId)}-${safe(itemId)}`
 }
 
 function formatValue(value: unknown): string {

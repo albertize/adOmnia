@@ -35,6 +35,7 @@ const VaultPanel           = React.lazy(() => import('@/components/vault/VaultPa
 const SettingsPanel        = React.lazy(() => import('@/components/settings/SettingsPanel').then(m => ({ default: m.SettingsPanel })))
 const GitSyncPanel         = React.lazy(() => import('@/components/workspace/GitSyncPanel').then(m => ({ default: m.GitSyncPanel })))
 const McpPanel             = React.lazy(() => import('@/components/mcp/McpPanel').then(m => ({ default: m.McpPanel })))
+const ExtensionViewsPanel  = React.lazy(() => import('@/components/plugins/ExtensionViewsPanel').then(m => ({ default: m.ExtensionViewsPanel })))
 
 let workspaceModulePromise: ReturnType<typeof importWorkspaceModule> | undefined
 
@@ -140,6 +141,7 @@ function panelFor(activeRail: RailItem): PanelDef {
     case 'themes': return { component: <SettingsPanel initialSection="themes" />, titleKey: 'settings', overflow: true }
     case 'templates': return { component: <SettingsPanel initialSection="templates" />, titleKey: 'settings', overflow: true }
     case 'plugins': return { component: <SettingsPanel initialSection="plugins" />, titleKey: 'settings', overflow: true }
+    case 'extensionviews': return { component: <ExtensionViewsPanel />, titleKey: 'Extension Views', overflow: true }
     case 'secretscanner': return { component: <UtilsPanel initialTool="secretscanner" />, titleKey: 'Power Tools', overflow: true }
     case 'gitsync': return { component: <GitSyncPanel />, titleKey: 'Git Sync', overflow: true }
     case 'mcp': return { component: <McpPanel />, titleKey: 'MCP Client', overflow: true }

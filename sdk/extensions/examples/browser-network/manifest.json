@@ -1,0 +1,19 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.browser-network-example",
+  "name": "Browser Network Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Summarizes browser-debug network traffic in a native extension view.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onBrowserNetwork", "onView:adomnia.browser-network-example.traffic", "onCommand:adomnia.browser-network-example.clear"],
+  "permissions": ["browserDebug.read", "browserDebug.control"],
+  "contributes": {
+    "commands": [{ "id": "adomnia.browser-network-example.clear", "title": "Clear browser traffic", "category": "Browser" }],
+    "views": [{ "id": "adomnia.browser-network-example.traffic", "container": "browser-analysis", "name": "Browser Traffic", "renderer": "declarative" }]
+  }
+}

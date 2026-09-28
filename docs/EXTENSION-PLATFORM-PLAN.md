@@ -7,18 +7,18 @@
 
 ## Implementation checkpoint — resume here
 
-**Recorded:** 2026-09-27. **Estimated plan coverage:** approximately 87%. This checkpoint is the handoff source of truth for the next session; retain the detailed checked/unchecked items below.
+**Recorded:** 2026-09-28. **Estimated plan coverage:** approximately 94%. This checkpoint is the handoff source of truth for the next session; retain the detailed checked/unchecked items below.
 
 ### Last verified green state
 
-The following passed after response-tab contributions, request/response toolbar actions, workbench event producers, diagnostics/progress, webview hardening, menu integration, and native declarative tree/form rendering were added:
+The following passed after rail view containers, response-tab contributions, request/response toolbar actions, complete workbench event producers, encrypted extension secrets, variable/assertion providers, Browser Debug network integration, mock/proxy runtime integration, diagnostics/progress, webview hardening, menu integration, and native declarative tree/form/details rendering were added:
 
 ```bash
 gofmt -w internal/extensions/*.go
 go test ./...
 cd sdk/extensions && npm exec --yes --package typescript -- tsc --noEmit --strict --target ES2020 --module ESNext --moduleResolution bundler api/index.d.ts
 cd frontend && npx tsc --noEmit
-cd frontend && npm test -- --run       # 133 files / 686 tests
+cd frontend && npm test -- --run       # 135 files / 688 tests
 cd frontend && npm run build
 ```
 
@@ -26,11 +26,11 @@ An executable CLI `doctor/init/test/pack/install/inspect` smoke test also passed
 
 ### Current completed edge
 
-Declarative `tree` and `form` support is now implemented and verified across the SDK type contract, JSON Schema, Go broker validation, command-ownership checks, and native React renderer. Forms use native keyboard-accessible controls and can invoke only commands declared by their owning extension. Commands now reach the palette, keybindings, status bar, tab context menu, and request/response toolbars with parsed `when` clauses. The protocol supports cancellation and structured error codes; read/write domain slices cover variables, collections, environments, and tabs; v1 lifecycle/hook execution is routed through an explicit compatibility adapter; and security/recovery/fuzz tests cover host termination, slow JavaScript, state corruption, package inputs, protocol messages, `when` clauses, view models, and webview policy constants.
+Declarative `tree` and `form` support is now implemented and verified across the SDK type contract, JSON Schema, Go broker validation, command-ownership checks, and native React renderer. Forms use native keyboard-accessible controls and can invoke only commands declared by their owning extension. Commands now reach the palette, keybindings, status bar, tab context menu, and request/response toolbars with parsed `when` clauses. Enabled non-response views are grouped into keyboard-accessible, persistently selected containers on a dedicated Extensions rail surface. The protocol supports cancellation and structured error codes; read/write domain slices cover variables, collections, environments, and tabs; extension-owned secrets are Vault-encrypted; assertion providers are lazily activated and merged into the native response Assertions tab; variable providers are lazily evaluated, kept in memory, and merged below explicit environment values; Browser Debug exposes a bounded 500-entry network snapshot, new-entry event, and permission-gated clear/select controls; mock and proxy expose canonical bounded snapshots, live hit/traffic events, redacted proxy headers, and explicit clear/stop controls without allowing silent runtime startup or reconfiguration; v1 lifecycle/hook execution is routed through an explicit compatibility adapter; and security/recovery/fuzz tests cover host termination, slow JavaScript, state corruption, package inputs, protocol messages, `when` clauses, view models, and webview policy constants.
 
 ### Exact next steps
 
-1. Continue with the unchecked items below, prioritizing rail containers, advanced mock/proxy/browser/flow/database/broker/document namespaces, assertion providers, performance benchmarks, accessibility, and cross-platform/manual desktop verification.
+1. Continue with the unchecked items below, prioritizing flow/load execution, database/broker/document namespaces, advanced opt-in mock/proxy/browser controls, production performance measurements, the remaining accessibility/manual pass, and cross-platform desktop verification.
 2. Regenerate Wails bindings only if a public Go binding/model changes.
 3. Keep the full verification sequence above green after each vertical slice.
 4. Run `wails3 task dev` and manually exercise install → permission review → enable → command/event/view/webview → reload/update → disable/uninstall before checking the final release gates.
@@ -670,11 +670,11 @@ The work is intentionally vertical and gated. Do not build every API namespace b
 **Deliverables**
 
 - [x] Approve this architecture or record deviations as ADRs.
-- [ ] Inventory every current plugin call site and every proposed extension point.
+- [x] Inventory every current plugin call site and every proposed extension point in [`EXTENSION-POINT-INVENTORY.md`](EXTENSION-POINT-INVENTORY.md).
 - [x] Define manifest v2 JSON Schema and API/protocol versioning policy.
 - [x] Define event semantics table and permission catalog.
 - [x] Define subprocess threat model, webview threat model, and package extraction limits.
-- [ ] Define compatibility fixtures from current v1 plugins.
+- [x] Define compatibility fixtures from current v1 plugins.
 - [x] Create documentation skeleton and authoring Agent Skill marked “preview/not yet available”.
 
 **Exit gate:** schemas and lifecycle can describe the first vertical-slice extension without implementation-specific ambiguity.
@@ -722,7 +722,7 @@ The work is intentionally vertical and gated. Do not build every API namespace b
 - [x] Connect commands to command palette, keybindings, menus, toolbars, and context menus.
 - [x] Add extension settings to the existing settings experience.
 - [x] Add output channels, progress, status items, and diagnostics.
-- [ ] Complete wiring and tests for core lifecycle, tab, environment, import, export, and workspace events.
+- [x] Complete wiring and tests for core lifecycle, tab, environment, import, export, and workspace events.
 - [x] Implement contribution cleanup on disable/reload/host restart.
 
 **Exit gate:** one extension contributes a command, shortcut, menu action, setting, status item, and lifecycle listener without core-specific code.
@@ -730,7 +730,7 @@ The work is intentionally vertical and gated. Do not build every API namespace b
 ### Phase 4 — Views, panels, and webviews
 
 - [x] Implement declarative view schema and host-native React renderers.
-- [ ] Add rail containers, trees, lists, tables, forms, detail panes, and response tabs.
+- [x] Add rail containers, trees, lists, tables, forms, detail panes, and response tabs.
 - [x] Add extension-view state restoration and keyboard/focus contracts.
 - [ ] Implement isolated webview asset serving, CSP generation, message bridge, theme tokens, and disposal.
 - [x] Add webview permission tests for navigation, network, clipboard, downloads, and Wails isolation.

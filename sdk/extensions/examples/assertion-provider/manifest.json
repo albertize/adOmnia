@@ -1,0 +1,16 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.assertion-provider-example",
+  "name": "Assertion Provider Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Adds a response security assertion to the native Assertions tab.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onAssertions"],
+  "permissions": ["assertions.provide"],
+  "contributes": {}
+}

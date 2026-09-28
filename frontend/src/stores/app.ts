@@ -4,6 +4,7 @@ import type { RoutedToolFile } from '@/lib/globalFileRouter'
 import { normalizeRailItem, type RailItem } from '@/lib/navigation'
 import { initialRailFromMemento, saveUiSessionMemento } from '@/lib/uiSessionMemento'
 import { markStartup } from '@/lib/startupPerformance'
+import { safeSetItem } from '@/lib/safeLocalStorage'
 
 export type { RailItem } from '@/lib/navigation'
 
@@ -25,6 +26,7 @@ export const RAIL_QUICK_NAV: RailItem[] = [
 interface AppState {
   activeRail: RailItem
   railHistory: RailItem[]
+  activeExtensionContainer: string | null
   devToolsVisible: boolean
   mockRunning: boolean
   proxyRunning: boolean
@@ -33,6 +35,7 @@ interface AppState {
   browserRunning: boolean
   pendingFileImport: RoutedToolFile | null
   setActiveRail: (rail: RailItem) => void
+  setActiveExtensionContainer: (id: string) => void
   queueFileImport: (file: RoutedToolFile) => void
   consumeFileImport: (kind: RoutedToolFile['kind']) => RoutedToolFile | null
   goBack: () => void
@@ -46,6 +49,13 @@ interface AppState {
 }
 
 const initialRail = initialRailFromMemento()
+const EXTENSION_CONTAINER_KEY = 'adomnia.extensionContainer.v1'
+
+function initialExtensionContainer(): string | null {
+  try { return localStorage.getItem(EXTENSION_CONTAINER_KEY) }
+  catch { return null }
+}
+
 markStartup('startup:memento-restored')
 
 function rememberActiveRail(rail: RailItem): void {
@@ -60,6 +70,7 @@ function rememberActiveRail(rail: RailItem): void {
 export const useAppStore = create<AppState>((set, get) => ({
   activeRail: initialRail,
   railHistory: [],
+  activeExtensionContainer: initialExtensionContainer(),
   devToolsVisible: false,
   mockRunning: false,
   proxyRunning: false,
@@ -73,6 +84,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeRail: rail,
       railHistory: s.activeRail !== rail ? [...s.railHistory.slice(-19), s.activeRail] : s.railHistory,
     }))
+  },
+  setActiveExtensionContainer: (id) => {
+    safeSetItem(EXTENSION_CONTAINER_KEY, id)
+    set({ activeExtensionContainer: id })
   },
   queueFileImport: (file) => set({ pendingFileImport: file }),
   consumeFileImport: (kind) => {

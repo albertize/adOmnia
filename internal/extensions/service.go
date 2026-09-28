@@ -14,13 +14,17 @@ import (
 	"time"
 
 	"adomnia/internal/httpexec"
+	mockRuntime "adomnia/internal/mock"
+	proxyRuntime "adomnia/internal/proxy"
 	"adomnia/internal/storage"
+	"adomnia/internal/vault"
 
 	bolt "go.etcd.io/bbolt"
 )
 
 const (
 	maxStateValueBytes     = 1 << 20
+	maxSecretValueBytes    = 64 << 10
 	maxExtensionStateBytes = 10 << 20
 	defaultHostCallTimeout = 12 * time.Second
 )
@@ -100,6 +104,8 @@ func (s *Service) Init() error {
 		return fmt.Errorf("resolve extension host executable: %w", err)
 	}
 	s.executable = executable
+	mockRuntime.ConfigureExtensionObserver(func(payload map[string]any) { go s.emitObservedEvent("onMockHit", payload) })
+	proxyRuntime.ConfigureExtensionObserver(func(payload map[string]any) { go s.emitObservedEvent("onProxyTraffic", payload) })
 	return nil
 }
 
@@ -177,6 +183,16 @@ func (s *Service) SetDomainContext(contextJSON string) error {
 	return nil
 }
 
+func (s *Service) emitObservedEvent(event string, payload map[string]any) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	if _, err := s.ApplyEventJSON(event, string(data)); err != nil {
+		log.Printf("[extensions-v2] %s event failed: %v", event, err)
+	}
+}
+
 func (s *Service) emitDomainContextEvents(previousValue, currentValue any) {
 	previous, _ := previousValue.(map[string]any)
 	current, _ := currentValue.(map[string]any)
@@ -216,6 +232,12 @@ func (s *Service) emitDomainContextEvents(previousValue, currentValue any) {
 	for id, tab := range previousTabs {
 		if _, exists := currentTabs[id]; !exists {
 			emit("onTabClose", tab)
+		}
+	}
+	previousBrowserEntries, currentBrowserEntries := domainItems(previous, "browserDebug"), domainItems(current, "browserDebug")
+	for id, entry := range currentBrowserEntries {
+		if _, exists := previousBrowserEntries[id]; !exists {
+			emit("onBrowserNetwork", entry)
 		}
 	}
 }
@@ -476,6 +498,121 @@ func (s *Service) ExecuteCommand(extensionID, commandID, argsJSON, source string
 	return result, nil
 }
 
+func (s *Service) EvaluateVariableProviders(contextJSON string) ([]VariableProviderResult, error) {
+	if len(contextJSON) > maxStateValueBytes {
+		return nil, fmt.Errorf("variable provider context exceeds %d bytes", maxStateValueBytes)
+	}
+	contextValues := map[string]any{}
+	if strings.TrimSpace(contextJSON) != "" {
+		if err := json.Unmarshal([]byte(contextJSON), &contextValues); err != nil {
+			return nil, fmt.Errorf("decode variable provider context: %w", err)
+		}
+	}
+	results := make([]VariableProviderResult, 0)
+	for _, instance := range s.registry.List() {
+		if !instance.Enabled || !manifestHasActivation(instance.Manifest, "onVariables") || requireGrant(instance, "variables.provide") != nil {
+			continue
+		}
+		if err := s.activate(instance.Manifest.ID); err != nil {
+			return nil, err
+		}
+		host, err := s.ensureHost()
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), defaultHostCallTimeout)
+		var execution HostExecutionResult
+		err = host.Request(ctx, "evaluateVariableProviders", EvaluateVariableProvidersRequest{ExtensionID: instance.Manifest.ID, Context: contextValues}, &execution)
+		cancel()
+		if err != nil {
+			s.markRuntimeFailure(instance.Manifest.ID, err)
+			return nil, fmt.Errorf("extension %s variable providers failed: %w", instance.Manifest.ID, err)
+		}
+		if !execution.Success {
+			return nil, fmt.Errorf("extension %s variable providers failed: %s", instance.Manifest.ID, execution.Error)
+		}
+		encoded, err := json.Marshal(execution.Data)
+		if err != nil {
+			return nil, err
+		}
+		var extensionResults []VariableProviderResult
+		if err := json.Unmarshal(encoded, &extensionResults); err != nil {
+			return nil, fmt.Errorf("decode extension variable provider results: %w", err)
+		}
+		for index := range extensionResults {
+			item := &extensionResults[index]
+			item.ExtensionID = instance.Manifest.ID
+			if !strings.HasPrefix(item.ProviderID, instance.Manifest.ID+".") || len(item.Values) > 200 {
+				return nil, fmt.Errorf("extension %s returned an invalid variable provider result", instance.Manifest.ID)
+			}
+			for key, value := range item.Values {
+				if strings.TrimSpace(key) == "" || len(key) > 256 || len(value) > maxSecretValueBytes {
+					return nil, fmt.Errorf("extension %s returned an invalid variable", instance.Manifest.ID)
+				}
+			}
+		}
+		results = append(results, extensionResults...)
+		if len(results) > 100 {
+			return nil, fmt.Errorf("extension variable providers exceed 100 entries")
+		}
+	}
+	return results, nil
+}
+
+func (s *Service) EvaluateAssertions(payloadJSON string) ([]AssertionProviderResult, error) {
+	if len(payloadJSON) > 5*1024*1024 {
+		return nil, fmt.Errorf("assertion payload exceeds 5 MiB")
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return nil, fmt.Errorf("decode assertion payload: %w", err)
+	}
+	results := make([]AssertionProviderResult, 0)
+	for _, instance := range s.registry.List() {
+		if !instance.Enabled || !manifestHasActivation(instance.Manifest, "onAssertions") || requireGrant(instance, "assertions.provide") != nil {
+			continue
+		}
+		if err := s.activate(instance.Manifest.ID); err != nil {
+			return nil, err
+		}
+		host, err := s.ensureHost()
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), defaultHostCallTimeout)
+		var execution HostExecutionResult
+		err = host.Request(ctx, "evaluateAssertions", EvaluateAssertionsRequest{ExtensionID: instance.Manifest.ID, Payload: payload}, &execution)
+		cancel()
+		if err != nil {
+			s.markRuntimeFailure(instance.Manifest.ID, err)
+			return nil, fmt.Errorf("extension %s assertion providers failed: %w", instance.Manifest.ID, err)
+		}
+		if !execution.Success {
+			return nil, fmt.Errorf("extension %s assertion providers failed: %s", instance.Manifest.ID, execution.Error)
+		}
+		encoded, err := json.Marshal(execution.Data)
+		if err != nil {
+			return nil, err
+		}
+		var extensionResults []AssertionProviderResult
+		if err := json.Unmarshal(encoded, &extensionResults); err != nil {
+			return nil, fmt.Errorf("decode extension assertion results: %w", err)
+		}
+		for index := range extensionResults {
+			item := &extensionResults[index]
+			item.ExtensionID = instance.Manifest.ID
+			if strings.TrimSpace(item.Label) == "" || len(item.Label) > 500 || len(item.Actual) > 4096 || len(item.Expected) > 4096 || len(item.Message) > 4096 {
+				return nil, fmt.Errorf("extension %s returned an invalid assertion result", instance.Manifest.ID)
+			}
+		}
+		results = append(results, extensionResults...)
+		if len(results) > 500 {
+			return nil, fmt.Errorf("extension assertion results exceed 500 entries")
+		}
+	}
+	return results, nil
+}
+
 func (s *Service) NotifyWorkbenchEvent(event, payloadJSON string) error {
 	if event != "onSave" && event != "onImport" && event != "onExport" {
 		return fmt.Errorf("unsupported workbench extension event: %s", event)
@@ -572,6 +709,8 @@ func (s *Service) Shutdown() {
 	s.viewNotifier = nil
 	s.actionNotifier = nil
 	s.mu.Unlock()
+	mockRuntime.ConfigureExtensionObserver(nil)
+	proxyRuntime.ConfigureExtensionObserver(nil)
 	if host != nil {
 		_ = host.Close()
 	}
@@ -811,6 +950,8 @@ func (s *Service) handleHostCall(_ context.Context, method string, raw json.RawM
 		return map[string]bool{"ok": true}, nil
 	case "state.get", "state.set", "state.delete":
 		return s.handleStateCall(instance, method, params)
+	case "secrets.get", "secrets.set", "secrets.delete":
+		return s.handleSecretCall(instance, method, params)
 	case "requests.getActive":
 		if err := requireGrant(instance, "requests.read"); err != nil {
 			return nil, err
@@ -833,6 +974,40 @@ func (s *Service) handleHostCall(_ context.Context, method string, raw json.RawM
 		}
 		s.mu.Unlock()
 		return value, nil
+	case "mock.getSnapshot":
+		if err := requireGrant(instance, "mock.read"); err != nil {
+			return nil, err
+		}
+		return mockRuntime.ExtensionSnapshot(), nil
+	case "mock.clearHits", "mock.stop":
+		if err := requireGrant(instance, "mock.control"); err != nil {
+			return nil, err
+		}
+		if err := s.checkRateLimit(extensionID+":mock-control", 10, time.Minute); err != nil {
+			return nil, err
+		}
+		if method == "mock.clearHits" {
+			mockRuntime.ExtensionClearHits()
+			return map[string]bool{"ok": true}, nil
+		}
+		return map[string]bool{"ok": true}, mockRuntime.ExtensionStop()
+	case "proxy.getSnapshot":
+		if err := requireGrant(instance, "proxy.read"); err != nil {
+			return nil, err
+		}
+		return proxyRuntime.ExtensionSnapshot(), nil
+	case "proxy.clearTraffic", "proxy.stop":
+		if err := requireGrant(instance, "proxy.control"); err != nil {
+			return nil, err
+		}
+		if err := s.checkRateLimit(extensionID+":proxy-control", 10, time.Minute); err != nil {
+			return nil, err
+		}
+		if method == "proxy.clearTraffic" {
+			proxyRuntime.ExtensionClearTraffic()
+			return map[string]bool{"ok": true}, nil
+		}
+		return map[string]bool{"ok": true}, proxyRuntime.ExtensionStop()
 	case "variables.getAll", "variables.resolve":
 		if err := requireGrant(instance, "variables.read"); err != nil {
 			return nil, err
@@ -872,6 +1047,9 @@ func (s *Service) handleHostCall(_ context.Context, method string, raw json.RawM
 		case "tabs":
 			permission = "tabs.write"
 			allowed = action == "open" || action == "close" || action == "setActive"
+		case "browserDebug":
+			permission = "browserDebug.control"
+			allowed = action == "clear" || action == "select"
 		}
 		if !allowed {
 			return nil, fmt.Errorf("unsupported extension domain action: %s.%s", domain, action)
@@ -902,6 +1080,7 @@ func (s *Service) handleHostCall(_ context.Context, method string, raw json.RawM
 			"collections":  "collections.read",
 			"tabs":         "tabs.read",
 			"workspace":    "workspace.read",
+			"browserDebug": "browserDebug.read",
 		}[domain]
 		if permission == "" {
 			return nil, fmt.Errorf("unknown extension domain: %s", domain)
@@ -1096,6 +1275,53 @@ func (s *Service) handleStateCall(instance ExtensionInstance, method string, par
 		return map[string]bool{"ok": true}, storage.Put(extensionsBucket, storageKey, data)
 	default:
 		return nil, fmt.Errorf("unsupported state operation")
+	}
+}
+
+func (s *Service) handleSecretCall(instance ExtensionInstance, method string, params map[string]interface{}) (interface{}, error) {
+	if err := requireGrant(instance, "secrets.own"); err != nil {
+		return nil, err
+	}
+	key, _ := params["key"].(string)
+	if strings.TrimSpace(key) == "" || len(key) > 256 || strings.ContainsRune(key, '\x00') {
+		return nil, fmt.Errorf("invalid extension secret key")
+	}
+	prefix := "secret/" + instance.Manifest.ID + "/"
+	storageKey := prefix + key
+	switch method {
+	case "secrets.get":
+		ciphertext, err := storage.Get(extensionsBucket, storageKey)
+		if err != nil {
+			return nil, err
+		}
+		if len(ciphertext) == 0 {
+			return params["fallback"], nil
+		}
+		plaintext, err := vault.Open(string(ciphertext))
+		if err != nil {
+			return nil, fmt.Errorf("open extension secret: %w", err)
+		}
+		return plaintext, nil
+	case "secrets.delete":
+		return map[string]bool{"ok": true}, storage.Delete(extensionsBucket, storageKey)
+	case "secrets.set":
+		value, ok := params["value"].(string)
+		if !ok {
+			return nil, fmt.Errorf("extension secret value must be a string")
+		}
+		if len(value) > maxSecretValueBytes {
+			return nil, fmt.Errorf("extension secret exceeds %d bytes", maxSecretValueBytes)
+		}
+		ciphertext, err := vault.Seal(value)
+		if err != nil {
+			return nil, fmt.Errorf("seal extension secret: %w", err)
+		}
+		if err := ensureStateQuota(prefix, storageKey, int64(len(ciphertext))); err != nil {
+			return nil, err
+		}
+		return map[string]bool{"ok": true}, storage.Put(extensionsBucket, storageKey, []byte(ciphertext))
+	default:
+		return nil, fmt.Errorf("unsupported secret operation")
 	}
 }
 

@@ -22,6 +22,7 @@ import { useExtensionsStore } from '@/stores/extensions'
 import { evaluateWhen } from '@/lib/extensionContext'
 import { ExtensionDeclarativeView } from '@/components/plugins/ExtensionDeclarativeView'
 import { ExtensionWebview } from '@/components/plugins/ExtensionWebview'
+import { evaluateExtensionAssertions } from '@/lib/extensions-v2-api'
 
 interface ResponsePanelProps {
   tabId: string
@@ -530,6 +531,7 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
       .map((item) => ({ extensionId: extension.manifest.id, view: item, key: `${extension.manifest.id}:${item.id}` }))
     : []), [extensions, response])
   const activeExtensionView = responseViews.find((item) => item.key === extensionViewKey) ?? null
+  const hasExtensionAssertionProviders = extensions.some((extension) => extension.enabled && extension.grants.includes('assertions.provide') && extension.manifest.activationEvents?.includes('onAssertions'))
   useEffect(() => {
     if (extensionViewKey && !activeExtensionView) setExtensionViewKey(null)
     updateViewState(tabId, { extensionResponseView: activeExtensionView?.key ?? null })
@@ -690,11 +692,38 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
     if (!response) return []
     return evaluateAssertions(assertions, response)
   }, [response, assertions])
+  const [extensionAssertionResults, setExtensionAssertionResults] = useState<AssertionResult[]>([])
+  const [extensionAssertionsLoading, setExtensionAssertionsLoading] = useState(false)
+  useEffect(() => {
+    let current = true
+    if (!response || loading || !hasExtensionAssertionProviders) {
+      setExtensionAssertionResults([])
+      setExtensionAssertionsLoading(false)
+      return () => { current = false }
+    }
+    setExtensionAssertionsLoading(true)
+    void evaluateExtensionAssertions({ response }).then((results) => {
+      if (!current) return
+      setExtensionAssertionResults(results.map((result, index) => ({
+        assertionId: `${result.extensionId ?? 'extension'}:${result.providerId}:${index}`,
+        passed: result.passed,
+        label: result.label,
+        actual: result.actual || result.message || '',
+        expected: result.expected || '',
+      })))
+    }).catch((error: unknown) => {
+      if (!current) return
+      setExtensionAssertionResults([])
+      window.dispatchEvent(new CustomEvent('adomnia:extension-error', { detail: error instanceof Error ? error.message : String(error) }))
+    }).finally(() => { if (current) setExtensionAssertionsLoading(false) })
+    return () => { current = false }
+  }, [hasExtensionAssertionProviders, loading, response])
+  const combinedAssertionResults = useMemo(() => [...assertionResults, ...extensionAssertionResults], [assertionResults, extensionAssertionResults])
   const scriptRuns = response?.scripts?.runs ?? []
   const scriptTests = scriptRuns.flatMap((run) => run.tests)
-  const testResultCount = assertionResults.length + scriptTests.length + scriptRuns.filter((run) => run.error).length
-  const testPassCount = assertionResults.filter((r) => r.passed).length + scriptTests.filter((r) => r.passed).length
-  const allTestsPassed = assertionResults.every((r) => r.passed) && scriptRuns.every((run) => run.passed)
+  const testResultCount = combinedAssertionResults.length + scriptTests.length + scriptRuns.filter((run) => run.error).length
+  const testPassCount = combinedAssertionResults.filter((r) => r.passed).length + scriptTests.filter((r) => r.passed).length
+  const allTestsPassed = combinedAssertionResults.every((r) => r.passed) && scriptRuns.every((run) => run.passed)
 
   const displayBody = response ? (beautifiedBody ?? response.body) : ''
   // Cap heavy syntax highlighting / pretty-printing for very large payloads.
@@ -907,7 +936,7 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
             </button>
           )}
 
-          {testResultCount > 0 && (
+          {(testResultCount > 0 || hasExtensionAssertionProviders) && (
             <button
               role="tab" aria-selected={!activeExtensionView && tab === 'assertions'}
               onClick={() => { setExtensionViewKey(null); setTab('assertions'); updateViewState(tabId, { responseSection: 'assertions' }) }}
@@ -1181,8 +1210,11 @@ export function ResponsePanel({ tabId, response, loading, oaSpec, oaPath, oaMeth
           {tab === 'contract' && !contractResult && (
             <NoContractView />
           )}
+          {tab === 'assertions' && extensionAssertionsLoading && testResultCount === 0 && (
+            <div role="status" className="rounded border border-border-1 bg-surface-2 p-3 text-xs text-text-3">{tr('Evaluating extension assertions…')}</div>
+          )}
           {tab === 'assertions' && testResultCount > 0 && (
-            <AssertionsView results={assertionResults} scriptRuns={scriptRuns} />
+            <AssertionsView results={combinedAssertionResults} scriptRuns={scriptRuns} />
           )}
           </>}
         </div>

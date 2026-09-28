@@ -26,5 +26,6 @@ Packaging excludes `.git`, `node_modules`, temporary files, and existing `.adomn
 - Development folders are trusted separately from managed packages.
 - Added permissions require renewed approval.
 - Network and secret access must be explicit and user-visible.
+- Extension-owned secrets require `secrets.own`, are isolated by extension ID, and are encrypted before persistence with the currently unlocked local Vault key. They are inaccessible while the Vault is locked.
 
 The subprocess permission broker and isolated webview are implemented. Process-level operating-system sandboxing is not yet applied: the capability API is the primary boundary, and extension code should still be treated as trusted local code. Repeated runtime failures quarantine an extension after three failures.

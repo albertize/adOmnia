@@ -10,6 +10,7 @@ import { useNavigationTranslation, useUiTranslation } from '@/lib/uiI18n'
 import { nextRovingFocusIndex } from '@/lib/accessibility'
 import { safeSetItem } from '@/lib/safeLocalStorage'
 import { normalizeRailItem } from '@/lib/navigation'
+import { useExtensionsStore } from '@/stores/extensions'
 import {
   Send, LayoutList, Shield, Server, Radio, Bug, Container, Network,
   Wrench, FileText, FileCode, Database, Braces, ChevronRight, FolderOpen,
@@ -49,6 +50,7 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   tools: Wrench,
   docs: FileText,
   workspace: GitBranch,
+  extensions: Puzzle,
 }
 
 const FEATURE_ICONS: Partial<Record<RailItem, React.ElementType>> = {
@@ -85,6 +87,7 @@ const FEATURE_ICONS: Partial<Record<RailItem, React.ElementType>> = {
   themes: Settings,
   templates: FileText,
   plugins: Puzzle,
+  extensionviews: Puzzle,
 }
 
 const CATEGORIES: CategoryDef[] = RAIL_CATEGORIES
@@ -303,6 +306,7 @@ export function Rail() {
   const appIcon = useAppIcon()
 
   const features = useSettingsStore((s) => s.settings.features)
+  const hasExtensionViews = useExtensionsStore((s) => s.extensions.some((extension) => extension.enabled && (extension.manifest.contributes?.views ?? []).some((view) => view.container !== 'response')))
 
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [quickItems, setQuickItems] = useState<Record<string, RailItem>>(() => {
@@ -365,6 +369,7 @@ export function Rail() {
       ...group,
       items: group.items.filter((item) => {
         if (item.id === 'plugins' && !features.pluginsEnabled) return false
+        if (item.id === 'extensionviews' && !hasExtensionViews) return false
         if (item.id === 'scenarios' && !features.dailyScenariosEnabled) return false
         if (!isFeatureVisible(item.id, features)) return false
         return true

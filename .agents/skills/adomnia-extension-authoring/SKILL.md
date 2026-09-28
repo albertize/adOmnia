@@ -8,7 +8,7 @@ compatibility: Requires the version-matched adOmnia Extension SDK and extension 
 # adOmnia extension authoring
 
 1. In the adOmnia source repository, read `sdk/extensions/docs/README.md`. Outside it, ask for or export the SDK with `adomnia extension sdk <directory>` and read that bundle's `docs/README.md`.
-2. Check the SDK milestone and event-status tables before promising behavior. The v2 isolated runtime, commands, HTTP events, state, declarative views, and sandboxed webviews are available; reserved domain events are not all wired yet.
+2. Check the SDK milestone and event-status tables before promising behavior. The v2 isolated runtime, commands, HTTP/workbench events, state, encrypted extension secrets, assertion providers, declarative views, and sandboxed webviews are available; consult the version-matched API docs before using reserved advanced domain namespaces.
 3. Scaffold with `adomnia extension init` and the closest template. Do not invent a package layout.
 4. Read only the routed documents needed for the requested contribution.
 5. Keep all contribution IDs under the extension ID namespace.

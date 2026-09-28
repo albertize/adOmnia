@@ -1,0 +1,16 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.mock-monitor-example",
+  "name": "Mock Monitor Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Shows recent local mock-server matches and misses.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onMockHit", "onView:adomnia.mock-monitor-example.hits"],
+  "permissions": ["mock.read"],
+  "contributes": { "views": [{ "id": "adomnia.mock-monitor-example.hits", "container": "mock-analysis", "name": "Mock Hits", "renderer": "declarative" }] }
+}

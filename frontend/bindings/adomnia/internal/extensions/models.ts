@@ -5,6 +5,39 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+export class AssertionProviderResult {
+    "extensionId"?: string;
+    "providerId": string;
+    "label": string;
+    "passed": boolean;
+    "actual"?: string;
+    "expected"?: string;
+    "message"?: string;
+
+    /** Creates a new AssertionProviderResult instance. */
+    constructor($$source: Partial<AssertionProviderResult> = {}) {
+        if (!("providerId" in $$source)) {
+            this["providerId"] = "";
+        }
+        if (!("label" in $$source)) {
+            this["label"] = "";
+        }
+        if (!("passed" in $$source)) {
+            this["passed"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new AssertionProviderResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): AssertionProviderResult {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new AssertionProviderResult($$parsedSource as Partial<AssertionProviderResult>);
+    }
+}
+
 export class CommandContribution {
     "id": string;
     "title": string;
@@ -489,6 +522,36 @@ export class StatusBarContribution {
     }
 }
 
+export class VariableProviderResult {
+    "extensionId"?: string;
+    "providerId": string;
+    "values": { [_ in string]?: string };
+
+    /** Creates a new VariableProviderResult instance. */
+    constructor($$source: Partial<VariableProviderResult> = {}) {
+        if (!("providerId" in $$source)) {
+            this["providerId"] = "";
+        }
+        if (!("values" in $$source)) {
+            this["values"] = {};
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new VariableProviderResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): VariableProviderResult {
+        const $$createField2_0 = $$createType19;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("values" in $$parsedSource) {
+            $$parsedSource["values"] = $$createField2_0($$parsedSource["values"]);
+        }
+        return new VariableProviderResult($$parsedSource as Partial<VariableProviderResult>);
+    }
+}
+
 export class ViewContribution {
     "id": string;
     "container": string;
@@ -544,3 +607,4 @@ const $$createType15 = $Create.Array($Create.Any);
 const $$createType16 = $Create.Map($Create.Any, $Create.Any);
 const $$createType17 = Engines.createFrom;
 const $$createType18 = Contributions.createFrom;
+const $$createType19 = $Create.Map($Create.Any, $Create.Any);

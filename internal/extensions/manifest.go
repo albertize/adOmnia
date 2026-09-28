@@ -132,7 +132,7 @@ var exactPermissions = map[string]struct{}{
 	"requests.read": {}, "requests.execute": {},
 	"responses.read": {}, "variables.read": {}, "variables.provide": {}, "assertions.provide": {},
 	"clipboard.read": {}, "clipboard.write": {}, "browserDebug.read": {}, "browserDebug.control": {},
-	"proxy.read": {}, "proxy.control": {}, "mock.control": {}, "flows.read": {}, "flows.execute": {},
+	"proxy.read": {}, "proxy.control": {}, "mock.read": {}, "mock.control": {}, "flows.read": {}, "flows.execute": {},
 	"databases.read": {}, "databases.execute": {}, "brokers.read": {}, "brokers.publish": {},
 	"documents.read": {}, "documents.write": {}, "vault.requestReference": {}, "network.private": {},
 }
@@ -146,7 +146,7 @@ var knownMenuLocations = map[string]struct{}{
 var knownActivationEvents = map[string]struct{}{
 	"onStartup": {}, "onWorkspaceOpen": {}, "onWorkspaceClose": {}, "onRequest": {}, "onResponse": {},
 	"onSend": {}, "onSave": {}, "onImport": {}, "onExport": {}, "onThemeChange": {}, "onEnvChange": {},
-	"onTabOpen": {}, "onTabClose": {},
+	"onTabOpen": {}, "onTabClose": {}, "onAssertions": {}, "onVariables": {}, "onBrowserNetwork": {}, "onMockHit": {}, "onProxyTraffic": {},
 }
 
 func DecodeManifest(data []byte) (Manifest, error) {

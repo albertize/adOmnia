@@ -21,7 +21,6 @@ func maskSensitiveHeaders(headers map[string]string) map[string]string {
 
 func recordEntry(url, method string, reqHeaders map[string]string, reqBody string, status int, respHeaders map[string]string, respBody string, duration time.Duration, errMsg string, matched bool, timing ...*requestTiming) {
 	trafficMu.Lock()
-	defer trafficMu.Unlock()
 
 	trafficSeq++
 	proxySettingsMu.RLock()
@@ -61,6 +60,8 @@ func recordEntry(url, method string, reqHeaders map[string]string, reqBody strin
 	if len(trafficLog) > maxEntries {
 		trafficLog = trafficLog[len(trafficLog)-maxEntries:]
 	}
+	trafficMu.Unlock()
+	notifyExtensionObserver(entry)
 }
 
 func truncateBody(s string, max int) string {
