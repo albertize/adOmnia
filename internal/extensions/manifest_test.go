@@ -196,6 +196,56 @@ func TestValidateManifestMockAndProxyEventsRequireReadPermissions(t *testing.T) 
 	}
 }
 
+func TestValidateManifestFlowCompletionRequiresExecutePermission(t *testing.T) {
+	manifest := validTestManifest()
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onFlowProgress", "onFlowComplete")
+	if diagnostics := ValidateManifest(manifest); !hasDiagnostic(diagnostics, "activation.permission") {
+		t.Fatalf("missing flow execute permission diagnostic: %#v", diagnostics)
+	}
+	manifest.Permissions = append(manifest.Permissions, "flows.execute")
+	if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+		t.Fatalf("valid flow completion diagnostics: %#v", diagnostics)
+	}
+}
+
+func TestValidateManifestDatabaseCompletionRequiresExecutePermission(t *testing.T) {
+	manifest := validTestManifest()
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onDatabaseComplete")
+	if diagnostics := ValidateManifest(manifest); !hasDiagnostic(diagnostics, "activation.permission") {
+		t.Fatalf("missing database execute permission diagnostic: %#v", diagnostics)
+	}
+	manifest.Permissions = append(manifest.Permissions, "databases.execute")
+	if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+		t.Fatalf("valid database completion diagnostics: %#v", diagnostics)
+	}
+}
+
+func TestValidateManifestBrokerCompletionRequiresPublishPermission(t *testing.T) {
+	manifest := validTestManifest()
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onBrokerPublishComplete")
+	if diagnostics := ValidateManifest(manifest); !hasDiagnostic(diagnostics, "activation.permission") {
+		t.Fatalf("missing broker publish permission diagnostic: %#v", diagnostics)
+	}
+	manifest.Permissions = append(manifest.Permissions, "brokers.publish")
+	if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+		t.Fatalf("valid broker completion diagnostics: %#v", diagnostics)
+	}
+}
+
+func TestValidateManifestDocumentCompletionRequiresScopedPermissions(t *testing.T) {
+	for _, test := range []struct{ event, permission string }{{"onDocumentReadComplete", "documents.readContents"}, {"onDocumentWriteComplete", "documents.write"}} {
+		manifest := validTestManifest()
+		manifest.ActivationEvents = append(manifest.ActivationEvents, test.event)
+		if diagnostics := ValidateManifest(manifest); !hasDiagnostic(diagnostics, "activation.permission") {
+			t.Fatalf("missing %s permission diagnostic: %#v", test.permission, diagnostics)
+		}
+		manifest.Permissions = append(manifest.Permissions, test.permission)
+		if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+			t.Fatalf("valid %s diagnostics: %#v", test.event, diagnostics)
+		}
+	}
+}
+
 func validTestManifest() Manifest {
 	return Manifest{
 		ManifestVersion:  SupportedManifestVersion,

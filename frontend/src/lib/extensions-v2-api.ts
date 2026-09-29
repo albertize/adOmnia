@@ -5,17 +5,20 @@ import type {
   ExtensionDiagnostic,
   ExtensionInstance,
   ExtensionLog,
+  ExtensionStorageUsage,
   HostExecutionResult,
   Manifest,
   RuntimeStatus,
   VariableProviderResult,
 } from '../../bindings/adomnia/internal/extensions/models'
 
-export type { AssertionProviderResult, ExtensionDiagnostic, ExtensionInstance, ExtensionLog, HostExecutionResult, Manifest, RuntimeStatus, VariableProviderResult }
+export type { AssertionProviderResult, ExtensionDiagnostic, ExtensionInstance, ExtensionLog, ExtensionStorageUsage, HostExecutionResult, Manifest, RuntimeStatus, VariableProviderResult }
 
 export const listExtensions = (): Promise<ExtensionInstance[]> => ExtensionBindings.GetExtensions()
 export const getExtensionLogs = (extensionId: string): Promise<ExtensionLog[]> => ExtensionBindings.GetLogs(extensionId)
 export const getExtensionDiagnostics = (extensionId: string): Promise<ExtensionDiagnostic[]> => ExtensionBindings.GetDiagnostics(extensionId)
+export const getExtensionStorageUsage = (extensionId: string): Promise<ExtensionStorageUsage> => ExtensionBindings.GetStorageUsage(extensionId)
+export const resetExtensionStorage = (extensionId: string): Promise<void> => ExtensionBindings.ResetStorage(extensionId)
 export const exportExtensionSDK = (destination: string): Promise<string> => ExtensionBindings.ExportSDK(destination)
 export const listExtensionContributions = (): Promise<Manifest[]> => ExtensionBindings.Contributions()
 export const installExtensionDirectory = (path: string, development = false): Promise<ExtensionInstance> =>
@@ -43,6 +46,10 @@ export const getExtensionWebviewHTML = (extensionId: string, viewId: string): Pr
 export const setExtensionWorkspaceContext = (workspaceId: string): Promise<void> => ExtensionBindings.SetWorkspaceContext(workspaceId)
 export const setExtensionDomainContext = (context: Record<string, unknown>): Promise<void> => ExtensionBindings.SetDomainContext(JSON.stringify(context))
 export const notifyExtensionWorkbenchEvent = (event: 'onSave' | 'onImport' | 'onExport', payload: Record<string, unknown>): Promise<void> => ExtensionBindings.NotifyWorkbenchEvent(event, JSON.stringify(payload))
+export const reportExtensionDocumentJob = (extensionId: string, jobId: string, event: 'onDocumentReadComplete' | 'onDocumentWriteComplete', payload: Record<string, unknown>): Promise<void> => ExtensionBindings.ReportDocumentJobEvent(extensionId, jobId, event, JSON.stringify(payload))
+export const reportExtensionBrokerJob = (extensionId: string, jobId: string, payload: Record<string, unknown>): Promise<void> => ExtensionBindings.ReportBrokerJobEvent(extensionId, jobId, JSON.stringify(payload))
+export const reportExtensionDatabaseJob = (extensionId: string, jobId: string, payload: Record<string, unknown>): Promise<void> => ExtensionBindings.ReportDatabaseJobEvent(extensionId, jobId, JSON.stringify(payload))
+export const reportExtensionFlowJob = (extensionId: string, jobId: string, event: 'onFlowProgress' | 'onFlowComplete', payload: Record<string, unknown>): Promise<void> => ExtensionBindings.ReportFlowJobEvent(extensionId, jobId, event, JSON.stringify(payload))
 export const evaluateExtensionAssertions = (payload: Record<string, unknown>): Promise<AssertionProviderResult[]> => ExtensionBindings.EvaluateAssertions(JSON.stringify(payload))
 export const evaluateExtensionVariableProviders = (context: Record<string, unknown>): Promise<VariableProviderResult[]> => ExtensionBindings.EvaluateVariableProviders(JSON.stringify(context))
 

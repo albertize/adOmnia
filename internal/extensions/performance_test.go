@@ -56,6 +56,27 @@ func BenchmarkDeclarativeViewValidation1000Rows(b *testing.B) {
 	}
 }
 
+func BenchmarkHostWarmActivation(b *testing.B) {
+	client, closeHost := newBenchmarkHost(b)
+	defer closeHost()
+	manifest := validTestManifest()
+	source := `export function activate(api) { api.commands.registerCommand('test.extension.run', () => ({ ok: true })) }`
+	b.ReportAllocs()
+	for iteration := 0; iteration < b.N; iteration++ {
+		b.StartTimer()
+		var activation HostExecutionResult
+		err := client.Request(context.Background(), "activate", ActivateHostRequest{Manifest: manifest, Source: source}, &activation)
+		b.StopTimer()
+		if err != nil || !activation.Success {
+			b.Fatalf("activate: result=%#v err=%v", activation, err)
+		}
+		var deactivated map[string]bool
+		if err := client.Request(context.Background(), "deactivate", DeactivateHostRequest{ExtensionID: manifest.ID}, &deactivated); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkHostEventDispatch(b *testing.B) {
 	client, closeHost := newBenchmarkHost(b)
 	defer closeHost()

@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Code2, Download, FolderPlus, Loader2, PackageOpen, Play, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Code2, Download, FolderPlus, Loader2, PackageOpen, Play, RefreshCw, Search, ShieldCheck, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { exportExtensionSDK, getExtensionDiagnostics, getExtensionLogs, selectExtensionArchive, selectExtensionDirectory, setExtensionSetting } from '@/lib/extensions-v2-api'
+import { exportExtensionSDK, getExtensionDiagnostics, getExtensionLogs, getExtensionStorageUsage, resetExtensionStorage, selectExtensionArchive, selectExtensionDirectory, setExtensionSetting, type ExtensionStorageUsage } from '@/lib/extensions-v2-api'
 import { useExtensionsStore } from '@/stores/extensions'
 import { ExtensionDeclarativeView } from './ExtensionDeclarativeView'
 import { ExtensionWebview } from './ExtensionWebview'
+
+type ExtensionFilter = 'installed' | 'development' | 'active' | 'disabled' | 'failed'
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`
+  return `${(value / (1024 * 1024)).toFixed(1)} MiB`
+}
 
 export function ExtensionPlatformV2() {
   const { extensions, loading, error, load, installDirectory, installArchive, reloadSource, setGrants, enable, disable, uninstall, execute } = useExtensionsStore()
@@ -16,6 +24,10 @@ export function ExtensionPlatformV2() {
   const [grantDraft, setGrantDraft] = useState<Record<string, string[]>>({})
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [sdkMessage, setSDKMessage] = useState<string | null>(null)
+  const [filter, setFilter] = useState<ExtensionFilter>('installed')
+  const [query, setQuery] = useState('')
+  const [storageUsage, setStorageUsage] = useState<Record<string, ExtensionStorageUsage>>({})
+  const [confirmStorageReset, setConfirmStorageReset] = useState<string | null>(null)
 
   useEffect(() => { void load() }, [load])
   useEffect(() => {
@@ -23,6 +35,17 @@ export function ExtensionPlatformV2() {
   }, [extensions])
 
   const activeCount = useMemo(() => extensions.filter((extension) => extension.active).length, [extensions])
+  const visibleExtensions = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return extensions.filter((extension) => {
+      if (filter === 'development' && extension.installKind !== 'development') return false
+      if (filter === 'active' && !extension.active) return false
+      if (filter === 'disabled' && extension.enabled) return false
+      if (filter === 'failed' && !extension.error && !extension.quarantined) return false
+      if (!needle) return true
+      return `${extension.manifest.name} ${extension.manifest.id} ${extension.manifest.description ?? ''}`.toLowerCase().includes(needle)
+    })
+  }, [extensions, filter, query])
 
   const run = async (key: string, operation: () => Promise<unknown>) => {
     setBusy(key)
@@ -71,6 +94,24 @@ export function ExtensionPlatformV2() {
       {error && <div className="flex items-center gap-2 border-b border-error/25 bg-error/10 px-4 py-2 text-[11px] text-error"><AlertTriangle size={12} /> {error}</div>}
       {sdkMessage && <div className="border-b border-success/25 bg-success/10 px-4 py-2 text-[11px] text-success">{sdkMessage}</div>}
 
+      {extensions.length > 0 && <div className="flex flex-wrap items-center gap-2 border-b border-border-1 bg-surface-0/40 px-3 py-2">
+        <div className="flex items-center gap-1" role="tablist" aria-label="Extension filters">
+          {(['installed', 'development', 'active', 'disabled', 'failed'] as const).map((item) => {
+            const count = item === 'installed' ? extensions.length
+              : item === 'development' ? extensions.filter((extension) => extension.installKind === 'development').length
+                : item === 'active' ? activeCount
+                  : item === 'disabled' ? extensions.filter((extension) => !extension.enabled).length
+                    : extensions.filter((extension) => extension.error || extension.quarantined).length
+            return <button key={item} type="button" role="tab" aria-selected={filter === item} onClick={() => setFilter(item)} className={cn('rounded px-2 py-1 text-[10px] capitalize transition-colors', filter === item ? 'bg-accent/15 text-accent' : 'text-text-3 hover:bg-surface-2 hover:text-text-1')}>{item}<span className="ml-1 text-[9px] opacity-70">{count}</span></button>
+          })}
+        </div>
+        <label className="ml-auto flex h-7 min-w-48 items-center gap-1.5 rounded border border-border-1 bg-surface-1 px-2 text-text-3 focus-within:border-accent">
+          <Search size={11} aria-hidden="true" />
+          <span className="sr-only">Search extensions</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search installed extensions" className="min-w-0 flex-1 bg-transparent text-[10px] text-text-1 outline-none placeholder:text-text-4" />
+        </label>
+      </div>}
+
       <div className="p-3">
         {loading && extensions.length === 0 ? (
           <div className="flex h-20 items-center justify-center gap-2 text-xs text-text-3"><Loader2 size={13} className="animate-spin" /> Loading extensions…</div>
@@ -80,9 +121,11 @@ export function ExtensionPlatformV2() {
             <p className="text-xs text-text-2">No v2 extensions installed.</p>
             <p className="mt-1 text-[10px] text-text-4">Install a validated folder generated with the local authoring SDK.</p>
           </div>
+        ) : visibleExtensions.length === 0 ? (
+          <div className="flex h-20 items-center justify-center text-xs text-text-4">No extensions match this filter.</div>
         ) : (
           <div className="space-y-2">
-            {extensions.map((extension) => {
+            {visibleExtensions.map((extension) => {
               const id = extension.manifest.id
               const open = expanded === id
               const requested = extension.manifest.permissions ?? []
@@ -91,11 +134,14 @@ export function ExtensionPlatformV2() {
               return (
                 <article key={id} className={cn('rounded-md border bg-surface-0', extension.error ? 'border-error/35' : 'border-border-1')}>
                   <div className="flex items-center gap-3 px-3 py-2.5">
-                    <button type="button" onClick={() => setExpanded(open ? null : id)} className="rounded p-0.5 text-text-4 hover:bg-surface-2 hover:text-text-2">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button>
+                    <button type="button" onClick={() => {
+                      setExpanded(open ? null : id)
+                      if (!open) void getExtensionStorageUsage(id).then((usage) => setStorageUsage((current) => ({ ...current, [id]: usage })))
+                    }} className="rounded p-0.5 text-text-4 hover:bg-surface-2 hover:text-text-2">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button>
                     <div className="grid h-8 w-8 place-items-center rounded bg-surface-2 text-[10px] font-bold text-accent">{extension.manifest.name.slice(0, 2).toUpperCase()}</div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2"><span className="truncate text-xs font-medium text-text-1">{extension.manifest.name}</span><span className="text-[9px] text-text-4">v{extension.manifest.version}</span></div>
-                      <div className="truncate text-[10px] text-text-4">{id} · {extension.installKind}{extension.active ? ' · active' : extension.enabled ? ' · lazy' : ''}</div>
+                      <div className="truncate text-[10px] text-text-4">{id} · {extension.installKind}{extension.active ? ` · active${extension.activationReason ? ` via ${extension.activationReason}` : ''}${extension.activationTimeMs ? ` · ${extension.activationTimeMs.toFixed(1)} ms` : ''}` : extension.enabled ? ' · lazy' : ''}</div>
                     </div>
                     {!reviewed && <span className="rounded bg-warning/10 px-2 py-0.5 text-[9px] text-warning">Permission review</span>}
                     {extension.error && <span title={extension.error} className="max-w-40 truncate rounded bg-error/10 px-2 py-0.5 text-[9px] text-error">{extension.quarantined ? 'Quarantined' : 'Failed'}</span>}
@@ -211,6 +257,20 @@ export function ExtensionPlatformV2() {
                           </div>
                         </div>
                       )}
+
+                      <div className="rounded border border-border-1 bg-surface-1 px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-[9px] font-semibold uppercase tracking-wider text-text-4">Extension storage</h3>
+                            <p className="mt-1 text-[10px] text-text-3">{storageUsage[id] ? `${storageUsage[id].entries} values · ${formatBytes(storageUsage[id].bytes)}` : 'Calculating local usage…'}</p>
+                          </div>
+                          {confirmStorageReset === id ? <span className="flex items-center gap-2 text-[10px]"><button type="button" onClick={() => setConfirmStorageReset(null)} className="text-text-3">Cancel</button><button type="button" onClick={() => void run(`${id}:reset-storage`, async () => {
+                            await resetExtensionStorage(id)
+                            setStorageUsage((current) => ({ ...current, [id]: { entries: 0, bytes: 0 } }))
+                            setConfirmStorageReset(null)
+                          })} className="text-error">Delete extension data</button></span> : <button type="button" onClick={() => setConfirmStorageReset(id)} className="text-[10px] text-text-3 hover:text-error">Reset data…</button>}
+                        </div>
+                      </div>
 
                       <div>
                         <div className="mb-2 flex items-center justify-between">

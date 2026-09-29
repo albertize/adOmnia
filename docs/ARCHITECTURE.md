@@ -52,14 +52,15 @@ The Go backend owns local system integrations:
 
 Wails exposes backend methods to the frontend through generated bindings.
 
-### Extension Platform v2 foundation
+### Extension Platform v2 preview
 
-The executable extension host is still planned, but its package contract and authoring
-foundation live in `internal/extensions` and `sdk/extensions`. The headless
-`adomnia extension` command can scaffold, strictly validate, deterministically package,
-and export the embedded Markdown SDK. This v2 foundation is intentionally separate from
-`internal/plugins`, which remains the currently executable v1 JavaScript plugin runtime.
-See `docs/EXTENSION-PLATFORM-PLAN.md` for the target subprocess and contribution architecture.
+The executable, authenticated extension-host subprocess, package registry, permission broker,
+contribution surfaces, domain slices, and authoring SDK live in `internal/extensions` and
+`sdk/extensions`. The headless `adomnia extension` command can scaffold, compile, test,
+strictly validate, deterministically package, install, inspect, and export the embedded
+Markdown SDK. The v2 runtime remains separate from `internal/plugins`; unchanged v1 packages
+execute through the explicit compatibility adapter. Remaining GA gates are tracked in
+`docs/EXTENSION-PLATFORM-PLAN.md`.
 
 ## Storage
 
@@ -70,7 +71,11 @@ adOmnia uses local storage only:
 - `.adomnia` workspace files for portable exports.
 - Local filesystem for templates, skins, plugins, and artifacts.
 
-Storage changes should preserve backward compatibility.
+Storage changes should preserve backward compatibility. The canonical database is
+`<application-data>/adomnia.db`. Builds that previously created
+`<application-data>/adomnia/adomnia.db` are migrated only after obtaining an exclusive bbolt
+lock; desktop and extension CLI use the same migration path, and startup chrome detection can
+read either location before migration.
 
 Collection workspaces use an additive bbolt schema:
 

@@ -20,6 +20,10 @@ Implemented namespaces:
 - `browserDebug`: bounded browser-network snapshots plus clear/select controls;
 - `mock`: canonical status/endpoints/hits snapshot plus explicit clear/stop controls;
 - `proxy`: canonical status/redacted traffic snapshot plus explicit clear/stop controls;
+- `flows`: bounded saved definitions plus cancellable asynchronous jobs through the canonical frontend flow/stress runners and targeted progress/completion events;
+- `databases`: redacted connection metadata plus cancellable query jobs through the canonical database workbench sidecar; credentials remain broker-owned, destructive operations require native confirmation, and completion is owner-targeted;
+- `brokers`: redacted connection metadata plus cancellable, natively confirmed publish jobs through canonical Kafka, RabbitMQ, MQTT, Redis, or NATS sidecar endpoints; credentials remain broker-owned and completion is owner-targeted;
+- `documents`: bounded PDF project metadata, cancellable bounded PDF text extraction, and flattened/original export through a native user-controlled Save dialog; raw bytes and selected filesystem paths are never returned to extension code;
 - `views`: declarative view state.
 
 Host functions are synchronous internally so goja can safely bridge them, but the TypeScript API returns promises where callers should `await` operations. Pure-JS dependencies can be bundled at build time. Node built-ins, native modules, dynamic runtime installation, `require` of external packages, and direct Wails calls are unsupported.

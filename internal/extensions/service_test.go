@@ -39,6 +39,53 @@ func TestServiceRejectsCorruptedAndOversizedState(t *testing.T) {
 	}
 }
 
+func TestServiceReportsAndResetsOwnedStorage(t *testing.T) {
+	if storage.DB() != nil {
+		storage.Close()
+	}
+	dataDir := t.TempDir()
+	if err := storage.Open(dataDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(storage.Close)
+	service := NewService(dataDir)
+	if err := service.Init(); err != nil {
+		t.Fatal(err)
+	}
+	installed, err := service.InstallDirectory(writeValidExtension(t), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownedKeys := []string{
+		"state/global/" + installed.Manifest.ID + "/one",
+		"state/workspace/workspace-1/" + installed.Manifest.ID + "/two",
+		"secret/" + installed.Manifest.ID + "/three",
+	}
+	for _, key := range ownedKeys {
+		if err := storage.Put(extensionsBucket, key, []byte("value")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := storage.Put(extensionsBucket, "state/global/another.extension/keep", []byte("keep")); err != nil {
+		t.Fatal(err)
+	}
+	usage, err := service.GetStorageUsage(installed.Manifest.ID)
+	if err != nil || usage.Entries != len(ownedKeys) || usage.Bytes != int64(len(ownedKeys)*len("value")) {
+		t.Fatalf("usage=%#v err=%v", usage, err)
+	}
+	if err := service.ResetStorage(installed.Manifest.ID); err != nil {
+		t.Fatal(err)
+	}
+	usage, err = service.GetStorageUsage(installed.Manifest.ID)
+	if err != nil || usage.Entries != 0 || usage.Bytes != 0 {
+		t.Fatalf("reset usage=%#v err=%v", usage, err)
+	}
+	kept, err := storage.Get(extensionsBucket, "state/global/another.extension/keep")
+	if err != nil || string(kept) != "keep" {
+		t.Fatalf("unrelated state=%q err=%v", kept, err)
+	}
+}
+
 func TestServiceStoresExtensionSecretsEncryptedAndVaultBound(t *testing.T) {
 	if storage.DB() != nil {
 		storage.Close()
@@ -92,7 +139,7 @@ func TestServiceBrokersGrantedDomainActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest.Permissions = append(manifest.Permissions, "tabs.write", "browserDebug.control", "mock.read", "mock.control", "proxy.read", "proxy.control")
+	manifest.Permissions = append(manifest.Permissions, "tabs.write", "browserDebug.control", "mock.read", "mock.control", "proxy.read", "proxy.control", "flows.read", "flows.execute", "databases.read", "databases.execute", "brokers.read", "brokers.publish", "documents.read", "documents.readContents", "documents.write")
 	data, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(filepath.Join(root, ManifestFileName), data, 0644); err != nil {
 		t.Fatal(err)
@@ -127,6 +174,118 @@ func TestServiceBrokersGrantedDomainActions(t *testing.T) {
 	if received.Domain != "browserDebug" || received.Action != "clear" {
 		t.Fatalf("browser action=%#v", received)
 	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "flowId": "flow-1", "options": map[string]any{}})
+	started, err := service.handleHostCall(context.Background(), "flows.start", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobID, _ := started.(map[string]any)["jobId"].(string)
+	if jobID == "" || received.Domain != "flows" || received.Action != "start" || received.Payload["jobId"] != jobID {
+		t.Fatalf("flow start=%#v action=%#v", started, received)
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "jobId": jobID})
+	if _, err := service.handleHostCall(context.Background(), "flows.cancel", params); err != nil || received.Action != "cancel" {
+		t.Fatalf("flow cancel action=%#v err=%v", received, err)
+	}
+	if err := service.ReportFlowJobEvent(installed.Manifest.ID, jobID, "onFlowComplete", `{"success":false,"error":"cancelled"}`); err == nil {
+		t.Fatal("completion without an active host unexpectedly succeeded")
+	}
+	if err := service.ReportFlowJobEvent(installed.Manifest.ID, "unknown", "onFlowComplete", `{}`); err == nil {
+		t.Fatal("unknown flow job completion accepted")
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "flowId": "flow-1", "options": map[string]any{"vus": 1, "mode": "iterations", "iterations": 1}})
+	stressStarted, err := service.handleHostCall(context.Background(), "flows.startStress", params)
+	if err != nil || received.Action != "stress" {
+		t.Fatalf("flow stress start=%#v action=%#v err=%v", stressStarted, received, err)
+	}
+	stressJobID := stressStarted.(map[string]any)["jobId"].(string)
+	_ = service.ReportFlowJobEvent(installed.Manifest.ID, stressJobID, "onFlowComplete", `{"success":true}`)
+	if err := storage.Put("pdfprojects", "meta:pdf-1", []byte(`{"id":"pdf-1","name":"Contract","pageCount":3,"updatedAt":42,"annotations":[{"secret":"not-exposed"}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID})
+	documents, err := service.handleHostCall(context.Background(), "documents.listPdfProjects", params)
+	if err != nil || len(documents.([]map[string]any)) != 1 || documents.([]map[string]any)[0]["annotations"] != nil {
+		t.Fatalf("documents=%#v err=%v", documents, err)
+	}
+	for _, documentJob := range []struct{ method, action, event string }{{"documents.startReadText", "readText", "onDocumentReadComplete"}, {"documents.startExport", "export", "onDocumentWriteComplete"}} {
+		params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "projectId": "pdf-1", "options": map[string]any{}})
+		started, startErr := service.handleHostCall(context.Background(), documentJob.method, params)
+		if startErr != nil || received.Domain != "documents" || received.Action != documentJob.action {
+			t.Fatalf("document start=%#v action=%#v err=%v", started, received, startErr)
+		}
+		documentJobID := started.(map[string]any)["jobId"].(string)
+		params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "jobId": documentJobID})
+		if _, cancelErr := service.handleHostCall(context.Background(), "documents.cancel", params); cancelErr != nil || received.Action != "cancel" {
+			t.Fatalf("document cancel action=%#v err=%v", received, cancelErr)
+		}
+		if reportErr := service.ReportDocumentJobEvent("another.extension", documentJobID, documentJob.event, `{}`); reportErr == nil {
+			t.Fatal("document job ownership was not enforced")
+		}
+		if reportErr := service.ReportDocumentJobEvent(installed.Manifest.ID, documentJobID, documentJob.event, `{"success":false,"error":"cancelled"}`); reportErr == nil {
+			t.Fatal("document completion without an active host unexpectedly succeeded")
+		}
+	}
+	if err := storage.Put("database", "connections", []byte(`[{"id":"db-1","name":"Local","driver":"sqlite","password":"secret","dsn":"private"}]`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.Put("broker_connections", "profiles-v2", []byte(`{"version":2,"profiles":[{"id":"broker-1","name":"Kafka","protocol":"kafka","config":{"password":"secret"}}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "connectionId": "db-1", "query": "SELECT 1", "options": map[string]any{"limit": 10}})
+	databaseStarted, err := service.handleHostCall(context.Background(), "databases.startQuery", params)
+	if err != nil || received.Domain != "databases" || received.Action != "query" {
+		t.Fatalf("database start=%#v action=%#v err=%v", databaseStarted, received, err)
+	}
+	databaseJobID := databaseStarted.(map[string]any)["jobId"].(string)
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "jobId": databaseJobID})
+	if _, err := service.handleHostCall(context.Background(), "databases.cancel", params); err != nil || received.Action != "cancel" {
+		t.Fatalf("database cancel action=%#v err=%v", received, err)
+	}
+	if err := service.ReportDatabaseJobEvent("another.extension", databaseJobID, `{}`); err == nil {
+		t.Fatal("database job ownership was not enforced")
+	}
+	if err := service.ReportDatabaseJobEvent(installed.Manifest.ID, databaseJobID, `{"success":false,"error":"cancelled"}`); err == nil {
+		t.Fatal("database completion without an active host unexpectedly succeeded")
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID})
+	databaseConnections, err := service.handleHostCall(context.Background(), "databases.listConnections", params)
+	if err != nil || len(databaseConnections.([]map[string]any)) != 1 || databaseConnections.([]map[string]any)[0]["password"] != nil {
+		t.Fatalf("database connections=%#v err=%v", databaseConnections, err)
+	}
+	brokerConnections, err := service.handleHostCall(context.Background(), "brokers.listConnections", params)
+	if err != nil || len(brokerConnections.([]map[string]any)) != 1 || brokerConnections.([]map[string]any)[0]["config"] != nil {
+		t.Fatalf("broker connections=%#v err=%v", brokerConnections, err)
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "connectionId": "broker-1", "destination": "events", "message": "hello", "options": map[string]any{}})
+	brokerStarted, err := service.handleHostCall(context.Background(), "brokers.startPublish", params)
+	if err != nil || received.Domain != "brokers" || received.Action != "publish" {
+		t.Fatalf("broker start=%#v action=%#v err=%v", brokerStarted, received, err)
+	}
+	brokerJobID := brokerStarted.(map[string]any)["jobId"].(string)
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "jobId": brokerJobID})
+	if _, err := service.handleHostCall(context.Background(), "brokers.cancel", params); err != nil || received.Action != "cancel" {
+		t.Fatalf("broker cancel action=%#v err=%v", received, err)
+	}
+	if err := service.ReportBrokerJobEvent("another.extension", brokerJobID, `{}`); err == nil {
+		t.Fatal("broker job ownership was not enforced")
+	}
+	if err := service.ReportBrokerJobEvent(installed.Manifest.ID, brokerJobID, `{"success":false,"error":"cancelled"}`); err == nil {
+		t.Fatal("broker completion without an active host unexpectedly succeeded")
+	}
+	if err := storage.Put("flows", "all", []byte(`[{"id":"flow-1","name":"Health"}]`)); err != nil {
+		t.Fatal(err)
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID})
+	listed, err := service.handleHostCall(context.Background(), "flows.list", params)
+	if err != nil || len(listed.([]map[string]any)) != 1 {
+		t.Fatalf("flows.list=%#v err=%v", listed, err)
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "id": "flow-1"})
+	flow, err := service.handleHostCall(context.Background(), "flows.get", params)
+	if err != nil || flow.(map[string]any)["name"] != "Health" {
+		t.Fatalf("flows.get=%#v err=%v", flow, err)
+	}
 	for _, method := range []string{"mock.getSnapshot", "mock.clearHits", "mock.stop", "proxy.getSnapshot", "proxy.clearTraffic", "proxy.stop"} {
 		params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID})
 		if _, err := service.handleHostCall(context.Background(), method, params); err != nil {
@@ -136,6 +295,44 @@ func TestServiceBrokersGrantedDomainActions(t *testing.T) {
 	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "domain": "tabs", "action": "deleteAll", "payload": map[string]any{}})
 	if _, err := service.handleHostCall(context.Background(), "domains.action", params); err == nil {
 		t.Fatal("unsupported domain action accepted")
+	}
+	var finalActions []ExtensionDomainAction
+	ConfigureDomainActionNotifier(service, func(action ExtensionDomainAction) { finalActions = append(finalActions, action) })
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "flowId": "flow-1", "options": map[string]any{}})
+	secondJob, err := service.handleHostCall(context.Background(), "flows.start", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondJobID := secondJob.(map[string]any)["jobId"].(string)
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "connectionId": "db-1", "query": "SELECT 1", "options": map[string]any{}})
+	lastDatabaseJob, err := service.handleHostCall(context.Background(), "databases.startQuery", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastDatabaseJobID := lastDatabaseJob.(map[string]any)["jobId"].(string)
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "connectionId": "broker-1", "destination": "events", "message": "hello", "options": map[string]any{}})
+	lastBrokerJob, err := service.handleHostCall(context.Background(), "brokers.startPublish", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastBrokerJobID := lastBrokerJob.(map[string]any)["jobId"].(string)
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "projectId": "pdf-1", "options": map[string]any{}})
+	lastDocumentJob, err := service.handleHostCall(context.Background(), "documents.startExport", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastDocumentJobID := lastDocumentJob.(map[string]any)["jobId"].(string)
+	if _, err := service.Disable(installed.Manifest.ID); err != nil {
+		t.Fatal(err)
+	}
+	cancelled := map[string]string{}
+	for _, action := range finalActions {
+		if action.Action == "cancel" {
+			cancelled[action.Domain] = action.Payload["jobId"].(string)
+		}
+	}
+	if cancelled["flows"] != secondJobID || cancelled["databases"] != lastDatabaseJobID || cancelled["brokers"] != lastBrokerJobID || cancelled["documents"] != lastDocumentJobID {
+		t.Fatalf("disable did not cancel owned jobs: %#v", finalActions)
 	}
 }
 
@@ -184,6 +381,10 @@ func TestServiceRecoversAfterExtensionHostTermination(t *testing.T) {
 	if result, err := service.ExecuteCommand(installed.Manifest.ID, "test.recover.hello", "{}", "test"); err != nil || !result.Success {
 		t.Fatalf("first command result=%#v err=%v", result, err)
 	}
+	activated, err := service.registry.Get(installed.Manifest.ID)
+	if err != nil || activated.ActivationReason != "command:test.recover.hello" || activated.ActivatedAt == "" || activated.ActivationTimeMS < 0 {
+		t.Fatalf("activation metadata=%#v err=%v", activated, err)
+	}
 	service.mu.Lock()
 	oldHost := service.host
 	service.mu.Unlock()
@@ -221,8 +422,8 @@ func TestServiceDispatchesWorkbenchAndDomainLifecycleEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest.ActivationEvents = []string{"onStartup", "onCommand:test.events.seen", "onWorkspaceOpen", "onWorkspaceClose", "onEnvChange", "onThemeChange", "onTabOpen", "onTabClose", "onSave", "onImport", "onExport", "onAssertions", "onVariables", "onBrowserNetwork"}
-	manifest.Permissions = []string{"workspace.read", "environments.read", "tabs.read", "assertions.provide", "variables.provide", "browserDebug.read"}
+	manifest.ActivationEvents = []string{"onStartup", "onCommand:test.events.seen", "onWorkspaceOpen", "onWorkspaceClose", "onEnvChange", "onThemeChange", "onTabOpen", "onTabClose", "onSave", "onImport", "onExport", "onAssertions", "onVariables", "onBrowserNetwork", "onFlowProgress", "onFlowComplete", "onDatabaseComplete", "onBrokerPublishComplete", "onDocumentReadComplete", "onDocumentWriteComplete"}
+	manifest.Permissions = []string{"workspace.read", "environments.read", "tabs.read", "assertions.provide", "variables.provide", "browserDebug.read", "flows.execute", "databases.execute", "brokers.publish", "documents.readContents", "documents.write"}
 	manifest.Contributes.Commands = []CommandContribution{{ID: "test.events.seen", Title: "Seen events"}}
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(filepath.Join(root, ManifestFileName), manifestData, 0644); err != nil {
@@ -242,6 +443,12 @@ export function activate(api) {
   api.events.onImport(record('onImport'))
   api.events.onExport(record('onExport'))
   api.events.onBrowserNetwork(record('onBrowserNetwork'))
+  api.events.onFlowProgress(record('onFlowProgress'))
+  api.events.onFlowComplete(record('onFlowComplete'))
+  api.events.onDatabaseComplete(record('onDatabaseComplete'))
+  api.events.onBrokerPublishComplete(record('onBrokerPublishComplete'))
+  api.events.onDocumentReadComplete(record('onDocumentReadComplete'))
+  api.events.onDocumentWriteComplete(record('onDocumentWriteComplete'))
   api.variables.registerProvider('test.events.dynamic', (context) => ({ providedHost: context.host }))
   api.assertions.registerProvider('test.events.status', (payload) => ({ label: 'Status below 400', passed: payload.response.status < 400, actual: String(payload.response.status), expected: '< 400' }))
   api.commands.registerCommand('test.events.seen', () => ({ events: seen }))
@@ -314,6 +521,74 @@ export function activate(api) {
 	}
 	if err := service.NotifyWorkbenchEvent("onUnexpected", `{}`); err == nil {
 		t.Fatal("unsupported workbench event accepted")
+	}
+	var flowAction ExtensionDomainAction
+	ConfigureDomainActionNotifier(service, func(action ExtensionDomainAction) { flowAction = action })
+	params, _ := json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "flowId": "flow-1", "options": map[string]any{}})
+	started, err := service.handleHostCall(context.Background(), "flows.start", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobID, _ := started.(map[string]any)["jobId"].(string)
+	if flowAction.Action != "start" || flowAction.Payload["jobId"] != jobID {
+		t.Fatalf("flow action=%#v", flowAction)
+	}
+	if err := service.ReportFlowJobEvent(installed.Manifest.ID, jobID, "onFlowProgress", `{"entriesCompleted":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ReportFlowJobEvent(installed.Manifest.ID, jobID, "onFlowComplete", `{"success":true}`); err != nil {
+		t.Fatal(err)
+	}
+	events = waitForExtensionEvents(t, service, installed.Manifest.ID, 17)
+	if entry, ok := events[len(events)-1].(map[string]any); !ok || entry["event"] != "onFlowComplete" {
+		t.Fatalf("flow completion events=%#v", events)
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "connectionId": "db-1", "query": "SELECT 1", "options": map[string]any{}})
+	databaseStarted, err := service.handleHostCall(context.Background(), "databases.startQuery", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	databaseJobID := databaseStarted.(map[string]any)["jobId"].(string)
+	if flowAction.Domain != "databases" || flowAction.Action != "query" {
+		t.Fatalf("database action=%#v", flowAction)
+	}
+	if err := service.ReportDatabaseJobEvent(installed.Manifest.ID, databaseJobID, `{"success":true,"result":{"rows":[[1]]}}`); err != nil {
+		t.Fatal(err)
+	}
+	events = waitForExtensionEvents(t, service, installed.Manifest.ID, 18)
+	if entry, ok := events[len(events)-1].(map[string]any); !ok || entry["event"] != "onDatabaseComplete" {
+		t.Fatalf("database completion events=%#v", events)
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "connectionId": "broker-1", "destination": "events", "message": "hello", "options": map[string]any{}})
+	brokerStarted, err := service.handleHostCall(context.Background(), "brokers.startPublish", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	brokerJobID := brokerStarted.(map[string]any)["jobId"].(string)
+	if flowAction.Domain != "brokers" || flowAction.Action != "publish" {
+		t.Fatalf("broker action=%#v", flowAction)
+	}
+	if err := service.ReportBrokerJobEvent(installed.Manifest.ID, brokerJobID, `{"success":true,"result":{"ok":true}}`); err != nil {
+		t.Fatal(err)
+	}
+	events = waitForExtensionEvents(t, service, installed.Manifest.ID, 19)
+	if entry, ok := events[len(events)-1].(map[string]any); !ok || entry["event"] != "onBrokerPublishComplete" {
+		t.Fatalf("broker completion events=%#v", events)
+	}
+	for index, documentJob := range []struct{ method, event string }{{"documents.startReadText", "onDocumentReadComplete"}, {"documents.startExport", "onDocumentWriteComplete"}} {
+		params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "projectId": "pdf-1", "options": map[string]any{}})
+		documentStarted, startErr := service.handleHostCall(context.Background(), documentJob.method, params)
+		if startErr != nil {
+			t.Fatal(startErr)
+		}
+		documentJobID := documentStarted.(map[string]any)["jobId"].(string)
+		if reportErr := service.ReportDocumentJobEvent(installed.Manifest.ID, documentJobID, documentJob.event, `{"success":true,"result":{}}`); reportErr != nil {
+			t.Fatal(reportErr)
+		}
+		events = waitForExtensionEvents(t, service, installed.Manifest.ID, 20+index)
+		if entry, ok := events[len(events)-1].(map[string]any); !ok || entry["event"] != documentJob.event {
+			t.Fatalf("document completion events=%#v", events)
+		}
 	}
 	variableResults, err := service.EvaluateVariableProviders(`{"host":"provided.test"}`)
 	if err != nil || len(variableResults) != 1 || variableResults[0].Values["providedHost"] != "provided.test" || variableResults[0].ExtensionID != installed.Manifest.ID {

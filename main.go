@@ -173,9 +173,14 @@ func normalizeWindowChrome(value string) string {
 }
 
 func readStartupWindowChrome() string {
-	path := filepath.Join(dataDir(), "adomnia", "adomnia.db")
+	path := filepath.Join(dataDir(), "adomnia.db")
 	if _, err := os.Stat(path); err != nil {
-		return windowChromeSystem
+		// Compatibility path used before storage.OpenApplicationDataDir migrates
+		// the duplicated application-directory segment during startup.
+		path = filepath.Join(dataDir(), "adomnia", "adomnia.db")
+		if _, legacyErr := os.Stat(path); legacyErr != nil {
+			return windowChromeSystem
+		}
 	}
 	db, err := bolt.Open(path, 0600, &bolt.Options{ReadOnly: true, Timeout: 250 * time.Millisecond})
 	if err != nil {

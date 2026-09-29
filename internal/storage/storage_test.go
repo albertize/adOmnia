@@ -3,6 +3,7 @@ package storage
 import (
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -40,6 +41,38 @@ func TestStorageKnownBucketsPersistAndUnknownBucketsFail(t *testing.T) {
 	}
 	if _, err := Get("typo", "all"); err == nil {
 		t.Fatal("storeGet on unknown bucket succeeded; want error")
+	}
+}
+
+func TestOpenApplicationDataDirMigratesDuplicatedLegacyPath(t *testing.T) {
+	if DB() != nil {
+		Close()
+	}
+	applicationDir := filepath.Join(t.TempDir(), "adomnia")
+	if err := Open(applicationDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := Put("extensions_v2", "migration-check", []byte("preserved")); err != nil {
+		t.Fatal(err)
+	}
+	Close()
+	legacy := filepath.Join(applicationDir, "adomnia", "adomnia.db")
+	if _, err := os.Stat(legacy); err != nil {
+		t.Fatalf("legacy fixture missing: %v", err)
+	}
+	if err := OpenApplicationDataDir(applicationDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(Close)
+	if _, err := os.Stat(filepath.Join(applicationDir, "adomnia.db")); err != nil {
+		t.Fatalf("migrated database missing: %v", err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy database still exists: %v", err)
+	}
+	value, err := Get("extensions_v2", "migration-check")
+	if err != nil || string(value) != "preserved" {
+		t.Fatalf("migrated value=%q err=%v", value, err)
 	}
 }
 

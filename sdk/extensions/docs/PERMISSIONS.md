@@ -22,11 +22,19 @@ Permissions declare intent and the Go desktop broker enforces grants again for e
 | `browserDebug.control` | Clear captured browser traffic or select an existing captured entry. |
 | `mock.read`, `proxy.read` | Read bounded canonical mock/proxy runtime snapshots and receive hit/traffic events. |
 | `mock.control`, `proxy.control` | Clear captured history or stop the corresponding local runtime. |
+| `flows.read` | List or inspect bounded locally saved API flow definitions. |
+| `flows.execute` | Start or cancel canonical flow/stress jobs and receive targeted progress/completion events. |
+| `databases.read`, `brokers.read` | List redacted local connection profile metadata without credentials or executable configuration. |
+| `databases.execute` | Start/cancel bounded query jobs through saved connections. Credentials remain broker-owned and potentially destructive operations require native confirmation. |
+| `brokers.publish` | Start/cancel confirmed publish jobs through saved Kafka, RabbitMQ, MQTT, Redis, or NATS connections. Credentials remain broker-owned. |
+| `documents.readContents` | Extract bounded text from saved PDF Editor projects; raw PDF bytes are not returned. |
+| `documents.write` | Export a saved PDF project only through the native user-controlled Save dialog; the chosen path is not returned. |
+| `documents.read` | List lightweight PDF project metadata without bytes, annotations, form values, or filesystem access. |
 | `network:<origin>` | Allow a webview `connect-src` to one exact HTTP(S) or WebSocket origin. It does not expose fetch to extension-host code. |
 
 ## Reserved permissions
 
-The manifest catalog also reserves narrow future permissions for environment/collection/tab/cookie writes, clipboard, advanced proxy/mock configuration, flows, databases, brokers, documents, Vault references, private network, workspace files, and declared process spawning. Declaration and grant do **not** imply an API exists: consult `API.md`.
+The manifest catalog also reserves narrow future permissions for environment/collection/tab/cookie writes, clipboard, advanced proxy/mock configuration, Vault references, private network, workspace files, and declared process spawning. Declaration and grant do **not** imply an API exists: consult `API.md`.
 
 Scoped forms are `network:<origin>`, `workspace.files.read:<scope>`, `workspace.files.write:<scope>`, and `process.spawn:<declared-command>`. The validator rejects malformed origins, wildcards, credentials, query/fragment components, and traversal-like scopes.
 

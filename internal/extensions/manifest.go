@@ -134,7 +134,7 @@ var exactPermissions = map[string]struct{}{
 	"clipboard.read": {}, "clipboard.write": {}, "browserDebug.read": {}, "browserDebug.control": {},
 	"proxy.read": {}, "proxy.control": {}, "mock.read": {}, "mock.control": {}, "flows.read": {}, "flows.execute": {},
 	"databases.read": {}, "databases.execute": {}, "brokers.read": {}, "brokers.publish": {},
-	"documents.read": {}, "documents.write": {}, "vault.requestReference": {}, "network.private": {},
+	"documents.read": {}, "documents.readContents": {}, "documents.write": {}, "vault.requestReference": {}, "network.private": {},
 }
 
 var scopedPermissionPrefixes = []string{"network:", "workspace.files.read:", "workspace.files.write:", "process.spawn:"}
@@ -146,7 +146,7 @@ var knownMenuLocations = map[string]struct{}{
 var knownActivationEvents = map[string]struct{}{
 	"onStartup": {}, "onWorkspaceOpen": {}, "onWorkspaceClose": {}, "onRequest": {}, "onResponse": {},
 	"onSend": {}, "onSave": {}, "onImport": {}, "onExport": {}, "onThemeChange": {}, "onEnvChange": {},
-	"onTabOpen": {}, "onTabClose": {}, "onAssertions": {}, "onVariables": {}, "onBrowserNetwork": {}, "onMockHit": {}, "onProxyTraffic": {},
+	"onTabOpen": {}, "onTabClose": {}, "onAssertions": {}, "onVariables": {}, "onBrowserNetwork": {}, "onMockHit": {}, "onProxyTraffic": {}, "onFlowProgress": {}, "onFlowComplete": {}, "onDatabaseComplete": {}, "onBrokerPublishComplete": {}, "onDocumentReadComplete": {}, "onDocumentWriteComplete": {},
 }
 
 func DecodeManifest(data []byte) (Manifest, error) {

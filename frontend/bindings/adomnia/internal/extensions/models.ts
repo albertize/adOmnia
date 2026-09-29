@@ -209,6 +209,9 @@ export class ExtensionInstance {
     "error"?: string;
     "failureCount"?: number;
     "quarantined"?: boolean;
+    "activationReason"?: string;
+    "activationTimeMs"?: number;
+    "activatedAt"?: string;
 
     /** Creates a new ExtensionInstance instance. */
     constructor($$source: Partial<ExtensionInstance> = {}) {
@@ -299,6 +302,31 @@ export class ExtensionLog {
             $$parsedSource["fields"] = $$createField4_0($$parsedSource["fields"]);
         }
         return new ExtensionLog($$parsedSource as Partial<ExtensionLog>);
+    }
+}
+
+export class ExtensionStorageUsage {
+    "entries": number;
+    "bytes": number;
+
+    /** Creates a new ExtensionStorageUsage instance. */
+    constructor($$source: Partial<ExtensionStorageUsage> = {}) {
+        if (!("entries" in $$source)) {
+            this["entries"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ExtensionStorageUsage instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ExtensionStorageUsage {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ExtensionStorageUsage($$parsedSource as Partial<ExtensionStorageUsage>);
     }
 }
 

@@ -9,7 +9,7 @@ adomnia extension test . --command publisher.extension.command --json
 adomnia extension pack . --json
 ```
 
-A valid report has `valid: true` and no error diagnostics. Treat warnings as review items even when packaging remains possible.
+A valid report has `valid: true` and no error diagnostics. Repository CI exports the embedded SDK, parses every fenced JSON snippet, compiles every fenced JavaScript/TypeScript snippet with embedded esbuild, validates every complete example manifest, and activates each example in the isolated host. Treat warnings as review items even when packaging remains possible.
 
 ## Tests to add with runtime APIs
 

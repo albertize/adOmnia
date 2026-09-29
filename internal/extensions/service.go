@@ -2,6 +2,8 @@ package extensions
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -71,6 +73,11 @@ type RuntimeStatus struct {
 	ActiveCount     int    `json:"activeCount"`
 }
 
+type ExtensionStorageUsage struct {
+	Entries int   `json:"entries"`
+	Bytes   int64 `json:"bytes"`
+}
+
 type Service struct {
 	registry *Registry
 
@@ -89,10 +96,19 @@ type Service struct {
 	logs           map[string][]ExtensionLog
 	diagnostics    map[string][]ExtensionDiagnostic
 	rateWindows    map[string][]time.Time
+	flowJobs       map[string]string
+	databaseJobs   map[string]string
+	brokerJobs     map[string]string
+	documentJobs   map[string]extensionDocumentJob
+}
+
+type extensionDocumentJob struct {
+	ExtensionID string
+	Event       string
 }
 
 func NewService(dataDir string) *Service {
-	return &Service{registry: NewRegistry(dataDir), workspaceID: "default", viewStates: map[string]json.RawMessage{}, activeRequest: map[string]any{}, activeResponse: map[string]any{}, domainContext: map[string]any{}, logs: map[string][]ExtensionLog{}, diagnostics: map[string][]ExtensionDiagnostic{}, rateWindows: map[string][]time.Time{}}
+	return &Service{registry: NewRegistry(dataDir), workspaceID: "default", viewStates: map[string]json.RawMessage{}, activeRequest: map[string]any{}, activeResponse: map[string]any{}, domainContext: map[string]any{}, logs: map[string][]ExtensionLog{}, diagnostics: map[string][]ExtensionDiagnostic{}, rateWindows: map[string][]time.Time{}, flowJobs: map[string]string{}, databaseJobs: map[string]string{}, brokerJobs: map[string]string{}, documentJobs: map[string]extensionDocumentJob{}}
 }
 
 func (s *Service) Init() error {
@@ -154,6 +170,66 @@ func (s *Service) GetLogs(extensionID string) []ExtensionLog {
 	result := make([]ExtensionLog, len(entries))
 	copy(result, entries)
 	return result
+}
+
+func (s *Service) GetStorageUsage(extensionID string) (ExtensionStorageUsage, error) {
+	if _, err := s.registry.Get(extensionID); err != nil {
+		return ExtensionStorageUsage{}, err
+	}
+	usage := ExtensionStorageUsage{}
+	err := storage.DB().View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(extensionsBucket))
+		if bucket == nil {
+			return nil
+		}
+		return bucket.ForEach(func(key, value []byte) error {
+			if extensionOwnsStorageKey(extensionID, string(key)) {
+				usage.Entries++
+				usage.Bytes += int64(len(value))
+			}
+			return nil
+		})
+	})
+	return usage, err
+}
+
+func (s *Service) ResetStorage(extensionID string) error {
+	if _, err := s.registry.Get(extensionID); err != nil {
+		return err
+	}
+	if err := storage.DB().Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(extensionsBucket))
+		if bucket == nil {
+			return nil
+		}
+		cursor := bucket.Cursor()
+		for key, _ := cursor.First(); key != nil; key, _ = cursor.Next() {
+			if extensionOwnsStorageKey(extensionID, string(key)) {
+				if err := cursor.Delete(); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	for key := range s.viewStates {
+		if strings.HasPrefix(key, extensionID+"\x00") {
+			delete(s.viewStates, key)
+		}
+	}
+	s.mu.Unlock()
+	return nil
+}
+
+func extensionOwnsStorageKey(extensionID, key string) bool {
+	if strings.HasPrefix(key, "state/global/"+extensionID+"/") || strings.HasPrefix(key, "secret/"+extensionID+"/") {
+		return true
+	}
+	parts := strings.Split(key, "/")
+	return len(parts) >= 5 && parts[0] == "state" && parts[1] == "workspace" && parts[3] == extensionID
 }
 
 func (s *Service) GetDiagnostics(extensionID string) []ExtensionDiagnostic {
@@ -292,7 +368,7 @@ func (s *Service) OpenView(extensionID, viewID string) (string, error) {
 		return "", fmt.Errorf("view is not declared by %s: %s", extensionID, viewID)
 	}
 	if manifestHasActivation(instance.Manifest, "onView:"+viewID) {
-		if err := s.activate(extensionID); err != nil {
+		if err := s.activate(extensionID, "view:"+viewID); err != nil {
 			return "", err
 		}
 	} else if !instance.Enabled {
@@ -401,7 +477,7 @@ func (s *Service) Enable(id string) (ExtensionInstance, error) {
 		return ExtensionInstance{}, err
 	}
 	if manifestHasActivation(instance.Manifest, "onStartup") {
-		if err := s.activate(id); err != nil {
+		if err := s.activate(id, "startup"); err != nil {
 			return ExtensionInstance{}, err
 		}
 		return s.registry.Get(id)
@@ -430,7 +506,7 @@ func (s *Service) SetSetting(id, key, valueJSON string) (ExtensionInstance, erro
 	}
 	// Recreate the VM so configuration.get observes the newly persisted value.
 	_ = s.deactivate(id)
-	if err := s.activate(id); err != nil {
+	if err := s.activate(id, "configuration:"+key); err != nil {
 		return instance, err
 	}
 	host, err := s.ensureHost()
@@ -472,7 +548,7 @@ func (s *Service) ExecuteCommand(extensionID, commandID, argsJSON, source string
 	if !declared {
 		return HostExecutionResult{}, fmt.Errorf("command is not declared by %s: %s", extensionID, commandID)
 	}
-	if err := s.activate(extensionID); err != nil {
+	if err := s.activate(extensionID, "command:"+commandID); err != nil {
 		return HostExecutionResult{}, err
 	}
 	args := map[string]any{}
@@ -513,7 +589,7 @@ func (s *Service) EvaluateVariableProviders(contextJSON string) ([]VariableProvi
 		if !instance.Enabled || !manifestHasActivation(instance.Manifest, "onVariables") || requireGrant(instance, "variables.provide") != nil {
 			continue
 		}
-		if err := s.activate(instance.Manifest.ID); err != nil {
+		if err := s.activate(instance.Manifest.ID, "variables"); err != nil {
 			return nil, err
 		}
 		host, err := s.ensureHost()
@@ -572,7 +648,7 @@ func (s *Service) EvaluateAssertions(payloadJSON string) ([]AssertionProviderRes
 		if !instance.Enabled || !manifestHasActivation(instance.Manifest, "onAssertions") || requireGrant(instance, "assertions.provide") != nil {
 			continue
 		}
-		if err := s.activate(instance.Manifest.ID); err != nil {
+		if err := s.activate(instance.Manifest.ID, "assertions"); err != nil {
 			return nil, err
 		}
 		host, err := s.ensureHost()
@@ -613,6 +689,145 @@ func (s *Service) EvaluateAssertions(payloadJSON string) ([]AssertionProviderRes
 	return results, nil
 }
 
+func (s *Service) ReportFlowJobEvent(extensionID, jobID, event, payloadJSON string) error {
+	if event != "onFlowProgress" && event != "onFlowComplete" {
+		return fmt.Errorf("unsupported flow job event: %s", event)
+	}
+	if len(payloadJSON) > 5*1024*1024 {
+		return fmt.Errorf("flow job result exceeds 5 MiB")
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return fmt.Errorf("decode flow job result: %w", err)
+	}
+	s.mu.Lock()
+	owner := s.flowJobs[jobID]
+	if owner == extensionID && event == "onFlowComplete" {
+		delete(s.flowJobs, jobID)
+	}
+	host := s.host
+	s.mu.Unlock()
+	if owner == "" || owner != extensionID {
+		return fmt.Errorf("unknown extension flow job")
+	}
+	if host == nil {
+		return fmt.Errorf("extension host is unavailable")
+	}
+	payload["jobId"] = jobID
+	ctx, cancel := context.WithTimeout(context.Background(), defaultHostCallTimeout)
+	defer cancel()
+	var result HostExecutionResult
+	if err := host.Request(ctx, "dispatchEvent", DispatchEventRequest{ExtensionID: extensionID, Event: event, Payload: payload}, &result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return fmt.Errorf("flow job event failed: %s", result.Error)
+	}
+	return nil
+}
+
+func (s *Service) ReportDatabaseJobEvent(extensionID, jobID, payloadJSON string) error {
+	if len(payloadJSON) > 5*1024*1024 {
+		return fmt.Errorf("database job result exceeds 5 MiB")
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return fmt.Errorf("decode database job result: %w", err)
+	}
+	s.mu.Lock()
+	owner := s.databaseJobs[jobID]
+	if owner == extensionID {
+		delete(s.databaseJobs, jobID)
+	}
+	host := s.host
+	s.mu.Unlock()
+	if owner == "" || owner != extensionID {
+		return fmt.Errorf("unknown extension database job")
+	}
+	if host == nil {
+		return fmt.Errorf("extension host is unavailable")
+	}
+	payload["jobId"] = jobID
+	ctx, cancel := context.WithTimeout(context.Background(), defaultHostCallTimeout)
+	defer cancel()
+	var result HostExecutionResult
+	if err := host.Request(ctx, "dispatchEvent", DispatchEventRequest{ExtensionID: extensionID, Event: "onDatabaseComplete", Payload: payload}, &result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return fmt.Errorf("database job event failed: %s", result.Error)
+	}
+	return nil
+}
+
+func (s *Service) ReportBrokerJobEvent(extensionID, jobID, payloadJSON string) error {
+	if len(payloadJSON) > 1024*1024 {
+		return fmt.Errorf("broker publish result exceeds 1 MiB")
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return fmt.Errorf("decode broker publish result: %w", err)
+	}
+	s.mu.Lock()
+	owner := s.brokerJobs[jobID]
+	if owner == extensionID {
+		delete(s.brokerJobs, jobID)
+	}
+	host := s.host
+	s.mu.Unlock()
+	if owner == "" || owner != extensionID {
+		return fmt.Errorf("unknown extension broker job")
+	}
+	if host == nil {
+		return fmt.Errorf("extension host is unavailable")
+	}
+	payload["jobId"] = jobID
+	ctx, cancel := context.WithTimeout(context.Background(), defaultHostCallTimeout)
+	defer cancel()
+	var result HostExecutionResult
+	if err := host.Request(ctx, "dispatchEvent", DispatchEventRequest{ExtensionID: extensionID, Event: "onBrokerPublishComplete", Payload: payload}, &result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return fmt.Errorf("broker publish event failed: %s", result.Error)
+	}
+	return nil
+}
+
+func (s *Service) ReportDocumentJobEvent(extensionID, jobID, event, payloadJSON string) error {
+	if len(payloadJSON) > 1024*1024 {
+		return fmt.Errorf("document job result exceeds 1 MiB")
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return fmt.Errorf("decode document job result: %w", err)
+	}
+	s.mu.Lock()
+	job, ok := s.documentJobs[jobID]
+	if ok && job.ExtensionID == extensionID && job.Event == event {
+		delete(s.documentJobs, jobID)
+	}
+	host := s.host
+	s.mu.Unlock()
+	if !ok || job.ExtensionID != extensionID || job.Event != event {
+		return fmt.Errorf("unknown extension document job")
+	}
+	if host == nil {
+		return fmt.Errorf("extension host is unavailable")
+	}
+	payload["jobId"] = jobID
+	ctx, cancel := context.WithTimeout(context.Background(), defaultHostCallTimeout)
+	defer cancel()
+	var result HostExecutionResult
+	if err := host.Request(ctx, "dispatchEvent", DispatchEventRequest{ExtensionID: extensionID, Event: event, Payload: payload}, &result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return fmt.Errorf("document job event failed: %s", result.Error)
+	}
+	return nil
+}
+
 func (s *Service) NotifyWorkbenchEvent(event, payloadJSON string) error {
 	if event != "onSave" && event != "onImport" && event != "onExport" {
 		return fmt.Errorf("unsupported workbench extension event: %s", event)
@@ -622,6 +837,14 @@ func (s *Service) NotifyWorkbenchEvent(event, payloadJSON string) error {
 	}
 	_, err := s.ApplyEventJSON(event, payloadJSON)
 	return err
+}
+
+func newFlowJobID() (string, error) {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value), nil
 }
 
 func (s *Service) ApplyEventJSON(event, payloadJSON string) (string, error) {
@@ -640,7 +863,7 @@ func (s *Service) ApplyEventJSON(event, payloadJSON string) (string, error) {
 		if !instance.Enabled || !manifestHasActivation(instance.Manifest, event) {
 			continue
 		}
-		if err := s.activate(instance.Manifest.ID); err != nil {
+		if err := s.activate(instance.Manifest.ID, "event:"+event); err != nil {
 			return "", err
 		}
 		host, err := s.ensureHost()
@@ -676,7 +899,7 @@ func (s *Service) ApplyEventJSON(event, payloadJSON string) (string, error) {
 func (s *Service) FireStartup() {
 	for _, instance := range s.registry.List() {
 		if instance.Enabled && manifestHasActivation(instance.Manifest, "onStartup") {
-			if err := s.activate(instance.Manifest.ID); err != nil {
+			if err := s.activate(instance.Manifest.ID, "startup"); err != nil {
 				log.Printf("[extensions-v2] startup activation failed for %s: %v", instance.Manifest.ID, err)
 			}
 		}
@@ -716,7 +939,7 @@ func (s *Service) Shutdown() {
 	}
 }
 
-func (s *Service) activate(id string) error {
+func (s *Service) activate(id, reason string) error {
 	instance, err := s.registry.Get(id)
 	if err != nil {
 		return err
@@ -764,6 +987,9 @@ func (s *Service) activate(id string) error {
 		_ = s.registry.RecordRuntimeFailure(id, fmt.Errorf("%s", result.Error))
 		return fmt.Errorf("extension activation failed: %s", result.Error)
 	}
+	if err := s.registry.SetActivationInfo(id, reason, result.TimeMS); err != nil {
+		return err
+	}
 	return s.registry.SetActive(id, true, "")
 }
 
@@ -791,6 +1017,35 @@ func (s *Service) deactivate(id string) error {
 
 func (s *Service) clearDynamicContributions(id string) {
 	s.mu.Lock()
+	cancelledJobs := make([]string, 0)
+	for jobID, owner := range s.flowJobs {
+		if owner == id {
+			cancelledJobs = append(cancelledJobs, jobID)
+			delete(s.flowJobs, jobID)
+		}
+	}
+	cancelledDatabaseJobs := make([]string, 0)
+	for jobID, owner := range s.databaseJobs {
+		if owner == id {
+			cancelledDatabaseJobs = append(cancelledDatabaseJobs, jobID)
+			delete(s.databaseJobs, jobID)
+		}
+	}
+	cancelledBrokerJobs := make([]string, 0)
+	for jobID, owner := range s.brokerJobs {
+		if owner == id {
+			cancelledBrokerJobs = append(cancelledBrokerJobs, jobID)
+			delete(s.brokerJobs, jobID)
+		}
+	}
+	cancelledDocumentJobs := make([]string, 0)
+	for jobID, job := range s.documentJobs {
+		if job.ExtensionID == id {
+			cancelledDocumentJobs = append(cancelledDocumentJobs, jobID)
+			delete(s.documentJobs, jobID)
+		}
+	}
+	notifier := s.actionNotifier
 	delete(s.diagnostics, id)
 	prefix := id + "\x00"
 	for key := range s.viewStates {
@@ -804,6 +1059,20 @@ func (s *Service) clearDynamicContributions(id string) {
 		}
 	}
 	s.mu.Unlock()
+	if notifier != nil {
+		for _, jobID := range cancelledJobs {
+			notifier(ExtensionDomainAction{ExtensionID: id, Domain: "flows", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+		}
+		for _, jobID := range cancelledDatabaseJobs {
+			notifier(ExtensionDomainAction{ExtensionID: id, Domain: "databases", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+		}
+		for _, jobID := range cancelledBrokerJobs {
+			notifier(ExtensionDomainAction{ExtensionID: id, Domain: "brokers", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+		}
+		for _, jobID := range cancelledDocumentJobs {
+			notifier(ExtensionDomainAction{ExtensionID: id, Domain: "documents", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+		}
+	}
 }
 
 func (s *Service) ensureHost() (*HostClient, error) {
@@ -991,6 +1260,275 @@ func (s *Service) handleHostCall(_ context.Context, method string, raw json.RawM
 			return map[string]bool{"ok": true}, nil
 		}
 		return map[string]bool{"ok": true}, mockRuntime.ExtensionStop()
+	case "documents.startReadText", "documents.startExport", "documents.cancel":
+		permission := "documents.readContents"
+		action := "readText"
+		event := "onDocumentReadComplete"
+		if method == "documents.startExport" {
+			permission, action, event = "documents.write", "export", "onDocumentWriteComplete"
+		}
+		if method == "documents.cancel" {
+			jobID, _ := params["jobId"].(string)
+			s.mu.Lock()
+			job, ok := s.documentJobs[jobID]
+			notifier := s.actionNotifier
+			s.mu.Unlock()
+			if !ok || job.ExtensionID != extensionID {
+				return nil, fmt.Errorf("unknown extension document job")
+			}
+			if notifier == nil {
+				return nil, fmt.Errorf("document workbench is unavailable")
+			}
+			notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "documents", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+			return map[string]bool{"accepted": true}, nil
+		}
+		if err := requireGrant(instance, permission); err != nil {
+			return nil, err
+		}
+		if err := s.checkRateLimit(extensionID+":document-job", 30, time.Minute); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		notifier := s.actionNotifier
+		s.mu.Unlock()
+		if notifier == nil {
+			return nil, fmt.Errorf("document workbench is unavailable")
+		}
+		projectID, _ := params["projectId"].(string)
+		if strings.TrimSpace(projectID) == "" || len(projectID) > 256 {
+			return nil, fmt.Errorf("invalid document project ID")
+		}
+		options, _ := params["options"].(map[string]any)
+		encoded, err := json.Marshal(options)
+		if err != nil || len(encoded) > 16*1024 {
+			return nil, fmt.Errorf("invalid document job options")
+		}
+		jobID, err := newFlowJobID()
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.documentJobs[jobID] = extensionDocumentJob{ExtensionID: extensionID, Event: event}
+		s.mu.Unlock()
+		notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "documents", Action: action, Payload: map[string]any{"jobId": jobID, "projectId": projectID, "options": options}})
+		return map[string]any{"jobId": jobID}, nil
+	case "documents.listPdfProjects":
+		if err := requireGrant(instance, "documents.read"); err != nil {
+			return nil, err
+		}
+		keys, err := storage.List("pdfprojects", "meta:")
+		if err != nil {
+			return nil, err
+		}
+		projects := make([]map[string]any, 0, len(keys))
+		for _, key := range keys {
+			data, readErr := storage.Get("pdfprojects", key)
+			if readErr != nil {
+				return nil, readErr
+			}
+			var project map[string]any
+			if json.Unmarshal(data, &project) == nil && project["id"] != nil && project["name"] != nil {
+				projects = append(projects, selectFields(project, "id", "name", "pageCount", "updatedAt"))
+			}
+		}
+		return projects, nil
+	case "databases.startQuery", "databases.cancel":
+		if err := requireGrant(instance, "databases.execute"); err != nil {
+			return nil, err
+		}
+		if err := s.checkRateLimit(extensionID+":database-job", 30, time.Minute); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		notifier := s.actionNotifier
+		s.mu.Unlock()
+		if notifier == nil {
+			return nil, fmt.Errorf("database workbench is unavailable")
+		}
+		if method == "databases.cancel" {
+			jobID, _ := params["jobId"].(string)
+			s.mu.Lock()
+			owner := s.databaseJobs[jobID]
+			s.mu.Unlock()
+			if owner != extensionID {
+				return nil, fmt.Errorf("unknown extension database job")
+			}
+			notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "databases", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+			return map[string]bool{"accepted": true}, nil
+		}
+		connectionID, _ := params["connectionId"].(string)
+		query, _ := params["query"].(string)
+		if strings.TrimSpace(connectionID) == "" || len(connectionID) > 256 || strings.TrimSpace(query) == "" || len(query) > maxStateValueBytes {
+			return nil, fmt.Errorf("invalid database query job")
+		}
+		options, _ := params["options"].(map[string]any)
+		encoded, err := json.Marshal(options)
+		if err != nil || len(encoded) > 16*1024 {
+			return nil, fmt.Errorf("invalid database query options")
+		}
+		jobID, err := newFlowJobID()
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.databaseJobs[jobID] = extensionID
+		s.mu.Unlock()
+		notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "databases", Action: "query", Payload: map[string]any{"jobId": jobID, "connectionId": connectionID, "query": query, "options": options}})
+		return map[string]any{"jobId": jobID}, nil
+	case "databases.listConnections":
+		if err := requireGrant(instance, "databases.read"); err != nil {
+			return nil, err
+		}
+		data, err := storage.Get("database", "connections")
+		if err != nil || len(data) == 0 {
+			return []any{}, err
+		}
+		var connections []map[string]any
+		if err := json.Unmarshal(data, &connections); err != nil {
+			return nil, fmt.Errorf("decode database connections: %w", err)
+		}
+		result := make([]map[string]any, 0, len(connections))
+		for _, connection := range connections {
+			result = append(result, selectFields(connection, "id", "name", "driver", "host", "port", "database", "collection", "sslMode", "sqlitePath", "savedInVault"))
+		}
+		return result, nil
+	case "brokers.startPublish", "brokers.cancel":
+		if err := requireGrant(instance, "brokers.publish"); err != nil {
+			return nil, err
+		}
+		if err := s.checkRateLimit(extensionID+":broker-job", 60, time.Minute); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		notifier := s.actionNotifier
+		s.mu.Unlock()
+		if notifier == nil {
+			return nil, fmt.Errorf("broker workbench is unavailable")
+		}
+		if method == "brokers.cancel" {
+			jobID, _ := params["jobId"].(string)
+			s.mu.Lock()
+			owner := s.brokerJobs[jobID]
+			s.mu.Unlock()
+			if owner != extensionID {
+				return nil, fmt.Errorf("unknown extension broker job")
+			}
+			notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "brokers", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+			return map[string]bool{"accepted": true}, nil
+		}
+		connectionID, _ := params["connectionId"].(string)
+		destination, _ := params["destination"].(string)
+		message, _ := params["message"].(string)
+		if strings.TrimSpace(connectionID) == "" || len(connectionID) > 256 || strings.TrimSpace(destination) == "" || len(destination) > 512 || len(message) > maxStateValueBytes {
+			return nil, fmt.Errorf("invalid broker publish job")
+		}
+		options, _ := params["options"].(map[string]any)
+		encoded, err := json.Marshal(options)
+		if err != nil || len(encoded) > 64*1024 {
+			return nil, fmt.Errorf("invalid broker publish options")
+		}
+		jobID, err := newFlowJobID()
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.brokerJobs[jobID] = extensionID
+		s.mu.Unlock()
+		notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "brokers", Action: "publish", Payload: map[string]any{"jobId": jobID, "connectionId": connectionID, "destination": destination, "message": message, "options": options}})
+		return map[string]any{"jobId": jobID}, nil
+	case "brokers.listConnections":
+		if err := requireGrant(instance, "brokers.read"); err != nil {
+			return nil, err
+		}
+		data, err := storage.Get("broker_connections", "profiles-v2")
+		if err != nil || len(data) == 0 {
+			return []any{}, err
+		}
+		var state struct {
+			Profiles []map[string]any `json:"profiles"`
+		}
+		if err := json.Unmarshal(data, &state); err != nil {
+			return nil, fmt.Errorf("decode broker connections: %w", err)
+		}
+		result := make([]map[string]any, 0, len(state.Profiles))
+		for _, profile := range state.Profiles {
+			result = append(result, selectFields(profile, "id", "name", "protocol", "updatedAt"))
+		}
+		return result, nil
+	case "flows.start", "flows.startStress", "flows.cancel":
+		if err := requireGrant(instance, "flows.execute"); err != nil {
+			return nil, err
+		}
+		if err := s.checkRateLimit(extensionID+":flow-job", 20, time.Minute); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		notifier := s.actionNotifier
+		s.mu.Unlock()
+		if notifier == nil {
+			return nil, fmt.Errorf("flow workbench is unavailable")
+		}
+		if method == "flows.cancel" {
+			jobID, _ := params["jobId"].(string)
+			s.mu.Lock()
+			owner := s.flowJobs[jobID]
+			s.mu.Unlock()
+			if owner != extensionID {
+				return nil, fmt.Errorf("unknown extension flow job")
+			}
+			notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "flows", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+			return map[string]bool{"accepted": true}, nil
+		}
+		flowID, _ := params["flowId"].(string)
+		if strings.TrimSpace(flowID) == "" || len(flowID) > 256 {
+			return nil, fmt.Errorf("invalid flow ID")
+		}
+		options, _ := params["options"].(map[string]any)
+		encoded, err := json.Marshal(options)
+		if err != nil || len(encoded) > maxStateValueBytes {
+			return nil, fmt.Errorf("invalid flow execution options")
+		}
+		jobID, err := newFlowJobID()
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.flowJobs[jobID] = extensionID
+		s.mu.Unlock()
+		action := "start"
+		if method == "flows.startStress" {
+			action = "stress"
+		}
+		notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "flows", Action: action, Payload: map[string]any{"jobId": jobID, "flowId": flowID, "options": options}})
+		return map[string]any{"jobId": jobID}, nil
+	case "flows.list", "flows.get":
+		if err := requireGrant(instance, "flows.read"); err != nil {
+			return nil, err
+		}
+		data, err := storage.Get("flows", "all")
+		if err != nil {
+			return nil, err
+		}
+		if len(data) == 0 {
+			return []any{}, nil
+		}
+		if len(data) > 5*1024*1024 {
+			return nil, fmt.Errorf("flow definitions exceed 5 MiB extension snapshot limit")
+		}
+		var flows []map[string]any
+		if err := json.Unmarshal(data, &flows); err != nil {
+			return nil, fmt.Errorf("decode flow definitions: %w", err)
+		}
+		if method == "flows.list" {
+			return flows, nil
+		}
+		id, _ := params["id"].(string)
+		for _, flow := range flows {
+			if flow["id"] == id {
+				return flow, nil
+			}
+		}
+		return nil, nil
 	case "proxy.getSnapshot":
 		if err := requireGrant(instance, "proxy.read"); err != nil {
 			return nil, err
@@ -1391,6 +1929,16 @@ func (s *Service) checkCompatibility(manifest Manifest) error {
 	version := s.appVersion
 	s.mu.Unlock()
 	return CheckEngineCompatibility(version, manifest.Engines.Adomnia)
+}
+
+func selectFields(source map[string]any, keys ...string) map[string]any {
+	result := make(map[string]any, len(keys))
+	for _, key := range keys {
+		if value, exists := source[key]; exists {
+			result[key] = value
+		}
+	}
+	return result
 }
 
 func cloneMap(source map[string]any) map[string]any {

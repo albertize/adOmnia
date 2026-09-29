@@ -85,7 +85,38 @@ func Buckets() []string {
 	return append([]string(nil), storeBuckets...)
 }
 
-// Open opens the local bbolt storage database within the application data directory.
+// OpenApplicationDataDir opens storage when the caller already resolved the
+// application directory (for example ~/.config/adomnia). Older desktop/CLI
+// callers passed that directory to Open, which appended adomnia a second time;
+// migrate that database only after proving it is not locked by another process.
+func OpenApplicationDataDir(applicationDir string) error {
+	applicationDir = filepath.Clean(applicationDir)
+	parent := filepath.Dir(applicationDir)
+	desired := filepath.Join(applicationDir, "adomnia.db")
+	legacy := filepath.Join(applicationDir, "adomnia", "adomnia.db")
+	if _, err := os.Stat(desired); os.IsNotExist(err) {
+		if _, legacyErr := os.Stat(legacy); legacyErr == nil {
+			probe, openErr := bolt.Open(legacy, 0600, &bolt.Options{Timeout: 250 * time.Millisecond})
+			if openErr != nil {
+				return fmt.Errorf("legacy adOmnia storage is in use: %w", openErr)
+			}
+			if closeErr := probe.Close(); closeErr != nil {
+				return closeErr
+			}
+			if err := os.MkdirAll(applicationDir, 0700); err != nil {
+				return err
+			}
+			if err := os.Rename(legacy, desired); err != nil {
+				return fmt.Errorf("migrate legacy adOmnia storage: %w", err)
+			}
+			_ = os.Remove(filepath.Dir(legacy))
+			log.Printf("[store] migrated bbolt database: %s -> %s", legacy, desired)
+		}
+	}
+	return Open(parent)
+}
+
+// Open opens the local bbolt storage database within the parent configuration directory.
 func Open(dataDirectory string) error {
 	baseDir = dataDirectory
 	dir := storeDir()

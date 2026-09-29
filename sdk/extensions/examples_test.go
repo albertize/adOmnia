@@ -13,7 +13,7 @@ import (
 	extensionsdk "adomnia/sdk/extensions"
 )
 
-var bundledExamples = []string{"response-security", "variable-inspector", "form-actions", "assertion-provider", "variable-provider", "browser-network", "mock-monitor", "proxy-monitor"}
+var bundledExamples = []string{"response-security", "variable-inspector", "form-actions", "assertion-provider", "variable-provider", "browser-network", "mock-monitor", "proxy-monitor", "flow-catalog", "data-source-catalog", "document-catalog", "flow-runner", "database-runner", "broker-publisher", "document-worker"}
 
 func TestBundledExtensionExamplesValidate(t *testing.T) {
 	destination := exportSDK(t)
@@ -43,6 +43,16 @@ func TestBundledExtensionExamplesActivateInIsolatedHost(t *testing.T) {
 			return map[string]any{"running": false, "hits": []any{}}, nil
 		case "proxy.getSnapshot":
 			return map[string]any{"running": false, "entries": []any{}}, nil
+		case "documents.listPdfProjects":
+			return []map[string]any{}, nil
+		case "databases.listConnections":
+			return []map[string]any{}, nil
+		case "brokers.listConnections":
+			return []map[string]any{}, nil
+		case "flows.list":
+			return []map[string]any{}, nil
+		case "flows.get":
+			return nil, nil
 		default:
 			return map[string]bool{"ok": true}, nil
 		}

@@ -49,6 +49,15 @@ type extensionRuntime struct {
 	events             map[string][]goja.Callable
 	assertionProviders map[string]goja.Callable
 	variableProviders  map[string]goja.Callable
+	disposables        []goja.Callable
+	timers             map[int64]runtimeTimer
+	nextTimerID        int64
+}
+
+type runtimeTimer struct {
+	due      time.Time
+	callback goja.Callable
+	args     []goja.Value
 }
 
 // RunExtensionHost runs the private child-process protocol. It must be invoked
@@ -211,7 +220,10 @@ func (s *hostServer) activate(operationID string, request ActivateHostRequest) H
 	_ = vm.Set("exports", exports)
 	runtime := &extensionRuntime{
 		manifest: request.Manifest, settings: request.Settings, vm: vm, module: module,
-		commands: map[string]goja.Callable{}, events: map[string][]goja.Callable{}, assertionProviders: map[string]goja.Callable{}, variableProviders: map[string]goja.Callable{},
+		commands: map[string]goja.Callable{}, events: map[string][]goja.Callable{}, assertionProviders: map[string]goja.Callable{}, variableProviders: map[string]goja.Callable{}, timers: map[int64]runtimeTimer{},
+	}
+	if err := installRuntimeTimers(runtime); err != nil {
+		return executionFailure(started, err)
 	}
 	api, err := s.buildAPI(runtime)
 	if err != nil {
@@ -236,7 +248,8 @@ func (s *hostServer) activate(operationID string, request ActivateHostRequest) H
 		if err != nil {
 			return err
 		}
-		return settledPromiseError(value)
+		_, err = resolveRuntimePromise(runtime, value, "activation returned a pending promise")
+		return err
 	}); err != nil {
 		return executionFailure(started, fmt.Errorf("activate extension: %w", err))
 	}
@@ -262,14 +275,9 @@ func (s *hostServer) executeCommand(operationID string, request ExecuteCommandRe
 		if err != nil {
 			return err
 		}
-		if promise, ok := value.Export().(*goja.Promise); ok {
-			if promise.State() == goja.PromiseStateRejected {
-				return fmt.Errorf("%s", promise.Result().String())
-			}
-			if promise.State() == goja.PromiseStatePending {
-				return fmt.Errorf("command returned a pending promise")
-			}
-			value = promise.Result()
+		value, err = resolveRuntimePromise(runtime, value, "command returned a pending promise")
+		if err != nil {
+			return err
 		}
 		if goja.IsUndefined(value) || goja.IsNull(value) {
 			return nil
@@ -306,14 +314,9 @@ func (s *hostServer) dispatchEvent(operationID string, request DispatchEventRequ
 			if err != nil {
 				return err
 			}
-			if promise, ok := value.Export().(*goja.Promise); ok {
-				if promise.State() == goja.PromiseStateRejected {
-					return fmt.Errorf("%s", promise.Result().String())
-				}
-				if promise.State() == goja.PromiseStatePending {
-					return fmt.Errorf("event handler returned a pending promise")
-				}
-				value = promise.Result()
+			value, err = resolveRuntimePromise(runtime, value, "event handler returned a pending promise")
+			if err != nil {
+				return err
 			}
 			if goja.IsUndefined(value) || goja.IsNull(value) {
 				return nil
@@ -366,14 +369,9 @@ func (s *hostServer) evaluateAssertions(operationID string, request EvaluateAsse
 			if err != nil {
 				return err
 			}
-			if promise, ok := value.Export().(*goja.Promise); ok {
-				if promise.State() == goja.PromiseStateRejected {
-					return fmt.Errorf("%s", promise.Result().String())
-				}
-				if promise.State() == goja.PromiseStatePending {
-					return fmt.Errorf("assertion provider returned a pending promise")
-				}
-				value = promise.Result()
+			value, err = resolveRuntimePromise(runtime, value, "assertion provider returned a pending promise")
+			if err != nil {
+				return err
 			}
 			if goja.IsUndefined(value) || goja.IsNull(value) {
 				return nil
@@ -438,14 +436,9 @@ func (s *hostServer) evaluateVariableProviders(operationID string, request Evalu
 			if err != nil {
 				return err
 			}
-			if promise, ok := value.Export().(*goja.Promise); ok {
-				if promise.State() == goja.PromiseStateRejected {
-					return fmt.Errorf("%s", promise.Result().String())
-				}
-				if promise.State() == goja.PromiseStatePending {
-					return fmt.Errorf("variable provider returned a pending promise")
-				}
-				value = promise.Result()
+			value, err = resolveRuntimePromise(runtime, value, "variable provider returned a pending promise")
+			if err != nil {
+				return err
 			}
 			if goja.IsUndefined(value) || goja.IsNull(value) {
 				values = map[string]string{}
@@ -476,20 +469,25 @@ func (s *hostServer) deactivate(operationID, extensionID string) error {
 	s.beginOperation(operationID, runtime.vm)
 	defer s.finishOperation(operationID)
 	deactivateValue := runtime.module.Get("exports").ToObject(runtime.vm).Get("deactivate")
-	if deactivate, ok := goja.AssertFunction(deactivateValue); ok {
-		if err := runWithTimeout(runtime.vm, 5*time.Second, func() error {
-			value, err := deactivate(goja.Undefined())
-			if err != nil {
-				return err
+	err := runWithTimeout(runtime.vm, 5*time.Second, func() error {
+		var firstErr error
+		if deactivate, ok := goja.AssertFunction(deactivateValue); ok {
+			value, callErr := deactivate(goja.Undefined())
+			if callErr == nil {
+				_, callErr = resolveRuntimePromise(runtime, value, "deactivation returned a pending promise")
 			}
-			return settledPromiseError(value)
-		}); err != nil {
-			delete(s.runtimes, extensionID)
-			return err
+			firstErr = callErr
 		}
-	}
+		for index := len(runtime.disposables) - 1; index >= 0; index-- {
+			if _, disposeErr := runtime.disposables[index](goja.Undefined()); disposeErr != nil && firstErr == nil {
+				firstErr = disposeErr
+			}
+		}
+		return firstErr
+	})
+	clear(runtime.timers)
 	delete(s.runtimes, extensionID)
-	return nil
+	return err
 }
 
 func (s *hostServer) beginOperation(id string, vm *goja.Runtime) {
@@ -532,7 +530,18 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 	_ = contextObject.Set("id", runtime.manifest.ID)
 	_ = contextObject.Set("version", runtime.manifest.Version)
 	subscriptions := vm.NewObject()
-	_ = subscriptions.Set("add", func(goja.FunctionCall) goja.Value { return goja.Undefined() })
+	_ = subscriptions.Set("add", func(call goja.FunctionCall) goja.Value {
+		disposable := call.Argument(0)
+		if goja.IsUndefined(disposable) || goja.IsNull(disposable) {
+			return goja.Undefined()
+		}
+		dispose, ok := goja.AssertFunction(disposable.ToObject(vm).Get("dispose"))
+		if !ok {
+			panic(vm.NewGoError(fmt.Errorf("subscription must expose dispose()")))
+		}
+		runtime.disposables = append(runtime.disposables, dispose)
+		return goja.Undefined()
+	})
 	_ = contextObject.Set("subscriptions", subscriptions)
 	_ = api.Set("context", contextObject)
 
@@ -571,14 +580,9 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
-		if promise, ok := value.Export().(*goja.Promise); ok {
-			if promise.State() == goja.PromiseStateRejected {
-				panic(vm.NewGoError(fmt.Errorf("%s", promise.Result().String())))
-			}
-			if promise.State() == goja.PromiseStatePending {
-				panic(vm.NewGoError(fmt.Errorf("nested command returned a pending promise")))
-			}
-			return promise.Result()
+		value, err = resolveRuntimePromise(runtime, value, "nested command returned a pending promise")
+		if err != nil {
+			panic(vm.NewGoError(err))
 		}
 		return value
 	})
@@ -607,7 +611,7 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 	_ = events.Set("on", func(call goja.FunctionCall) goja.Value {
 		return registerEvent(call.Argument(0).String(), call.Argument(1))
 	})
-	for method, event := range map[string]string{"onRequest": "onRequest", "onResponse": "onResponse", "onSend": "onSend", "onSave": "onSave", "onImport": "onImport", "onExport": "onExport", "onThemeChange": "onThemeChange", "onEnvironmentChange": "onEnvChange", "onTabOpen": "onTabOpen", "onTabClose": "onTabClose", "onWorkspaceOpen": "onWorkspaceOpen", "onWorkspaceClose": "onWorkspaceClose", "onBrowserNetwork": "onBrowserNetwork", "onMockHit": "onMockHit", "onProxyTraffic": "onProxyTraffic"} {
+	for method, event := range map[string]string{"onRequest": "onRequest", "onResponse": "onResponse", "onSend": "onSend", "onSave": "onSave", "onImport": "onImport", "onExport": "onExport", "onThemeChange": "onThemeChange", "onEnvironmentChange": "onEnvChange", "onTabOpen": "onTabOpen", "onTabClose": "onTabClose", "onWorkspaceOpen": "onWorkspaceOpen", "onWorkspaceClose": "onWorkspaceClose", "onBrowserNetwork": "onBrowserNetwork", "onMockHit": "onMockHit", "onProxyTraffic": "onProxyTraffic", "onFlowProgress": "onFlowProgress", "onFlowComplete": "onFlowComplete", "onDatabaseComplete": "onDatabaseComplete", "onBrokerPublishComplete": "onBrokerPublishComplete", "onDocumentReadComplete": "onDocumentReadComplete", "onDocumentWriteComplete": "onDocumentWriteComplete"} {
 		eventName := event
 		_ = events.Set(method, func(call goja.FunctionCall) goja.Value { return registerEvent(eventName, call.Argument(0)) })
 	}
@@ -751,6 +755,183 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 		return goja.Undefined()
 	})
 	_ = api.Set("mock", mockAPI)
+
+	documentsAPI := vm.NewObject()
+	_ = documentsAPI.Set("readPdfText", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "documents.readContents") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: documents.readContents")))
+		}
+		if !manifestHasActivation(runtime.manifest, "onDocumentReadComplete") {
+			panic(vm.NewGoError(fmt.Errorf("document text reading requires onDocumentReadComplete activation")))
+		}
+		result, err := s.hostCall("documents.startReadText", map[string]any{"extensionId": runtime.manifest.ID, "projectId": call.Argument(0).String(), "options": call.Argument(1).Export()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = documentsAPI.Set("exportPdf", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "documents.write") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: documents.write")))
+		}
+		if !manifestHasActivation(runtime.manifest, "onDocumentWriteComplete") {
+			panic(vm.NewGoError(fmt.Errorf("document export requires onDocumentWriteComplete activation")))
+		}
+		result, err := s.hostCall("documents.startExport", map[string]any{"extensionId": runtime.manifest.ID, "projectId": call.Argument(0).String(), "options": call.Argument(1).Export()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = documentsAPI.Set("cancel", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "documents.readContents") && !hasPermission(runtime.manifest.Permissions, "documents.write") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: document jobs")))
+		}
+		if _, err := s.hostCall("documents.cancel", map[string]any{"extensionId": runtime.manifest.ID, "jobId": call.Argument(0).String()}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = documentsAPI.Set("listPdfProjects", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "documents.read") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: documents.read")))
+		}
+		result, err := s.hostCall("documents.listPdfProjects", map[string]any{"extensionId": runtime.manifest.ID})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = api.Set("documents", documentsAPI)
+
+	databasesAPI := vm.NewObject()
+	_ = databasesAPI.Set("execute", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "databases.execute") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: databases.execute")))
+		}
+		if !manifestHasActivation(runtime.manifest, "onDatabaseComplete") {
+			panic(vm.NewGoError(fmt.Errorf("database execution requires onDatabaseComplete activation")))
+		}
+		result, err := s.hostCall("databases.startQuery", map[string]any{"extensionId": runtime.manifest.ID, "connectionId": call.Argument(0).String(), "query": call.Argument(1).String(), "options": call.Argument(2).Export()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = databasesAPI.Set("cancel", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "databases.execute") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: databases.execute")))
+		}
+		if _, err := s.hostCall("databases.cancel", map[string]any{"extensionId": runtime.manifest.ID, "jobId": call.Argument(0).String()}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = databasesAPI.Set("listConnections", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "databases.read") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: databases.read")))
+		}
+		result, err := s.hostCall("databases.listConnections", map[string]any{"extensionId": runtime.manifest.ID})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = api.Set("databases", databasesAPI)
+
+	brokersAPI := vm.NewObject()
+	_ = brokersAPI.Set("publish", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "brokers.publish") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: brokers.publish")))
+		}
+		if !manifestHasActivation(runtime.manifest, "onBrokerPublishComplete") {
+			panic(vm.NewGoError(fmt.Errorf("broker publishing requires onBrokerPublishComplete activation")))
+		}
+		result, err := s.hostCall("brokers.startPublish", map[string]any{"extensionId": runtime.manifest.ID, "connectionId": call.Argument(0).String(), "destination": call.Argument(1).String(), "message": call.Argument(2).String(), "options": call.Argument(3).Export()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = brokersAPI.Set("cancel", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "brokers.publish") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: brokers.publish")))
+		}
+		if _, err := s.hostCall("brokers.cancel", map[string]any{"extensionId": runtime.manifest.ID, "jobId": call.Argument(0).String()}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = brokersAPI.Set("listConnections", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "brokers.read") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: brokers.read")))
+		}
+		result, err := s.hostCall("brokers.listConnections", map[string]any{"extensionId": runtime.manifest.ID})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = api.Set("brokers", brokersAPI)
+
+	flowsAPI := vm.NewObject()
+	_ = flowsAPI.Set("list", func(goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "flows.read") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: flows.read")))
+		}
+		result, err := s.hostCall("flows.list", map[string]any{"extensionId": runtime.manifest.ID})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = flowsAPI.Set("execute", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "flows.execute") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: flows.execute")))
+		}
+		if !manifestHasActivation(runtime.manifest, "onFlowComplete") {
+			panic(vm.NewGoError(fmt.Errorf("flow execution requires onFlowComplete activation")))
+		}
+		result, err := s.hostCall("flows.start", map[string]any{"extensionId": runtime.manifest.ID, "flowId": call.Argument(0).String(), "options": call.Argument(1).Export()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = flowsAPI.Set("executeStress", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "flows.execute") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: flows.execute")))
+		}
+		if !manifestHasActivation(runtime.manifest, "onFlowComplete") {
+			panic(vm.NewGoError(fmt.Errorf("flow execution requires onFlowComplete activation")))
+		}
+		result, err := s.hostCall("flows.startStress", map[string]any{"extensionId": runtime.manifest.ID, "flowId": call.Argument(0).String(), "options": call.Argument(1).Export()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = flowsAPI.Set("cancel", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "flows.execute") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: flows.execute")))
+		}
+		_, err := s.hostCall("flows.cancel", map[string]any{"extensionId": runtime.manifest.ID, "jobId": call.Argument(0).String()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	_ = flowsAPI.Set("get", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "flows.read") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: flows.read")))
+		}
+		result, err := s.hostCall("flows.get", map[string]any{"extensionId": runtime.manifest.ID, "id": call.Argument(0).String()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = api.Set("flows", flowsAPI)
 
 	proxyAPI := vm.NewObject()
 	_ = proxyAPI.Set("getSnapshot", func(goja.FunctionCall) goja.Value {
@@ -1077,19 +1258,66 @@ func runWithTimeout(vm *goja.Runtime, timeout time.Duration, operation func() er
 	return err
 }
 
-func settledPromiseError(value goja.Value) error {
+func installRuntimeTimers(runtime *extensionRuntime) error {
+	vm := runtime.vm
+	if err := vm.Set("setTimeout", func(call goja.FunctionCall) goja.Value {
+		callback, ok := goja.AssertFunction(call.Argument(0))
+		if !ok {
+			panic(vm.NewGoError(fmt.Errorf("setTimeout callback must be a function")))
+		}
+		delay := call.Argument(1).ToInteger()
+		if delay < 0 {
+			delay = 0
+		}
+		if delay > 60_000 {
+			delay = 60_000
+		}
+		runtime.nextTimerID++
+		id := runtime.nextTimerID
+		args := append([]goja.Value(nil), call.Arguments[2:]...)
+		runtime.timers[id] = runtimeTimer{due: time.Now().Add(time.Duration(delay) * time.Millisecond), callback: callback, args: args}
+		return vm.ToValue(id)
+	}); err != nil {
+		return err
+	}
+	return vm.Set("clearTimeout", func(call goja.FunctionCall) goja.Value {
+		delete(runtime.timers, call.Argument(0).ToInteger())
+		return goja.Undefined()
+	})
+}
+
+func resolveRuntimePromise(runtime *extensionRuntime, value goja.Value, pendingMessage string) (goja.Value, error) {
 	promise, ok := value.Export().(*goja.Promise)
 	if !ok {
-		return nil
+		return value, nil
 	}
-	switch promise.State() {
-	case goja.PromiseStateFulfilled:
-		return nil
-	case goja.PromiseStateRejected:
-		return fmt.Errorf("%s", promise.Result().String())
-	default:
-		return fmt.Errorf("pending promises are not supported by this host operation")
+	for promise.State() == goja.PromiseStatePending {
+		var nextID int64
+		var next runtimeTimer
+		for id, timer := range runtime.timers {
+			if nextID == 0 || timer.due.Before(next.due) {
+				nextID, next = id, timer
+			}
+		}
+		if nextID == 0 {
+			return value, fmt.Errorf("%s", pendingMessage)
+		}
+		if wait := time.Until(next.due); wait > 0 {
+			if wait > 5*time.Millisecond {
+				wait = 5 * time.Millisecond
+			}
+			time.Sleep(wait)
+			continue
+		}
+		delete(runtime.timers, nextID)
+		if _, err := next.callback(goja.Undefined(), next.args...); err != nil {
+			return value, err
+		}
 	}
+	if promise.State() == goja.PromiseStateRejected {
+		return promise.Result(), fmt.Errorf("%s", promise.Result().String())
+	}
+	return promise.Result(), nil
 }
 
 func transformV2Module(source string) string {
@@ -1144,6 +1372,16 @@ func eventPermission(event string) string {
 		return "mock.read"
 	case "onProxyTraffic":
 		return "proxy.read"
+	case "onFlowProgress", "onFlowComplete":
+		return "flows.execute"
+	case "onDatabaseComplete":
+		return "databases.execute"
+	case "onBrokerPublishComplete":
+		return "brokers.publish"
+	case "onDocumentReadComplete":
+		return "documents.readContents"
+	case "onDocumentWriteComplete":
+		return "documents.write"
 	default:
 		return ""
 	}

@@ -1,0 +1,16 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.data-source-catalog-example",
+  "name": "Data Source Catalog Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Lists redacted database and broker profile metadata.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onView:adomnia.data-source-catalog-example.sources"],
+  "permissions": ["databases.read", "brokers.read"],
+  "contributes": { "views": [{ "id": "adomnia.data-source-catalog-example.sources", "container": "data-analysis", "name": "Data Sources", "renderer": "declarative" }] }
+}

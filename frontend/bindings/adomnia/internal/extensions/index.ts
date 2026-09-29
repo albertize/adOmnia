@@ -10,6 +10,7 @@ export {
     ExtensionDiagnostic,
     ExtensionInstance,
     ExtensionLog,
+    ExtensionStorageUsage,
     HostExecutionResult,
     InstallKind,
     KeybindingContribution,

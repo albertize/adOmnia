@@ -28,7 +28,7 @@ The adapter is the only new runtime path allowed to execute v1 hooks. Legacy Wai
 | State | configuration, global/workspace state, encrypted extension secrets | registry/bbolt broker and unlocked local Vault |
 | Variables | read/resolve and `onVariables` providers | active environment snapshot and in-memory provider merge below explicit environment values |
 | Assertions | `onAssertions` providers | native response Assertions tab |
-| Domains | collection import/add request, environment selection, tab open/close/select, browser-network read/clear/select, mock hit/status/clear/stop, proxy traffic/status/clear/stop | permission-checked Go broker into canonical stores and local runtimes |
+| Domains | collection import/add request, environment selection, tab open/close/select, browser-network read/clear/select, mock hit/status/clear/stop, proxy traffic/status/clear/stop, saved flow and load/stress execution jobs, redacted database/broker profile reads, cancellable database query jobs with destructive-operation confirmation, confirmed broker publish jobs over canonical protocol endpoints, PDF project metadata/text reads, and native-dialog PDF exports | permission-checked Go broker into canonical stores and local runtimes |
 | Observability | logs, notifications, progress, diagnostics | bounded service buffers and desktop event bridge |
 
 Integration coverage for lifecycle/workbench producers lives in `internal/extensions/service_test.go`; host API/protocol coverage lives in `host_test.go` and `host_process_integration_test.go`.
@@ -41,10 +41,10 @@ The manifest permission catalog reserves these names, but the SDK must describe 
 - clipboard and picker-scoped filesystem operations;
 - advanced mock/proxy startup, configuration, rules, breakpoints, map-local/map-remote, throttling, and CA operations beyond the shipped bounded read/clear/stop slices;
 - browser debugging navigation, page control, DOM, console, storage, and device emulation beyond the shipped bounded network read/clear/select slice;
-- flow and load/stress execution;
-- database read/execute;
-- broker inspect/publish;
-- document read/write;
+- advanced load/stress orchestration beyond the shipped canonical flow stress runner;
+- database schema mutation/configuration beyond confirmed query jobs over saved connections;
+- broker consuming/subscriptions and administrative operations beyond confirmed one-message publishing;
+- arbitrary document formats, raw PDF bytes, Markdown/filesystem integration, and unattended writes beyond bounded PDF text and native-dialog export;
 - authentication providers and explicit AI actions;
 - code-generation targets and richer import/export providers;
 - process spawning and private-network host APIs.

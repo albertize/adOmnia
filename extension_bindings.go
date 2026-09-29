@@ -31,6 +31,14 @@ func (e *ExtensionService) GetDiagnostics(extensionID string) []extensionRuntime
 	return e.service.GetDiagnostics(extensionID)
 }
 
+func (e *ExtensionService) GetStorageUsage(extensionID string) (extensionRuntime.ExtensionStorageUsage, error) {
+	return e.service.GetStorageUsage(extensionID)
+}
+
+func (e *ExtensionService) ResetStorage(extensionID string) error {
+	return e.service.ResetStorage(extensionID)
+}
+
 func (e *ExtensionService) ExportSDK(destination string) (string, error) {
 	return extensionsdk.Export(destination)
 }
@@ -101,6 +109,22 @@ func (e *ExtensionService) SetDomainContext(contextJSON string) error {
 
 func (e *ExtensionService) NotifyWorkbenchEvent(event, payloadJSON string) error {
 	return e.service.NotifyWorkbenchEvent(event, payloadJSON)
+}
+
+func (e *ExtensionService) ReportFlowJobEvent(extensionID, jobID, event, payloadJSON string) error {
+	return e.service.ReportFlowJobEvent(extensionID, jobID, event, payloadJSON)
+}
+
+func (e *ExtensionService) ReportDatabaseJobEvent(extensionID, jobID, payloadJSON string) error {
+	return e.service.ReportDatabaseJobEvent(extensionID, jobID, payloadJSON)
+}
+
+func (e *ExtensionService) ReportBrokerJobEvent(extensionID, jobID, payloadJSON string) error {
+	return e.service.ReportBrokerJobEvent(extensionID, jobID, payloadJSON)
+}
+
+func (e *ExtensionService) ReportDocumentJobEvent(extensionID, jobID, event, payloadJSON string) error {
+	return e.service.ReportDocumentJobEvent(extensionID, jobID, event, payloadJSON)
 }
 
 func (e *ExtensionService) EvaluateAssertions(payloadJSON string) ([]extensionRuntime.AssertionProviderResult, error) {

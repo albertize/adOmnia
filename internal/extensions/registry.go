@@ -32,19 +32,22 @@ const (
 )
 
 type ExtensionInstance struct {
-	Manifest     Manifest       `json:"manifest"`
-	Enabled      bool           `json:"enabled"`
-	Active       bool           `json:"active"`
-	Grants       []string       `json:"grants"`
-	Settings     map[string]any `json:"settings"`
-	InstallDir   string         `json:"installDir"`
-	InstallKind  InstallKind    `json:"installKind"`
-	Source       string         `json:"source"`
-	PackageHash  string         `json:"packageHash,omitempty"`
-	InstalledAt  string         `json:"installedAt"`
-	Error        string         `json:"error,omitempty"`
-	FailureCount int            `json:"failureCount,omitempty"`
-	Quarantined  bool           `json:"quarantined,omitempty"`
+	Manifest         Manifest       `json:"manifest"`
+	Enabled          bool           `json:"enabled"`
+	Active           bool           `json:"active"`
+	Grants           []string       `json:"grants"`
+	Settings         map[string]any `json:"settings"`
+	InstallDir       string         `json:"installDir"`
+	InstallKind      InstallKind    `json:"installKind"`
+	Source           string         `json:"source"`
+	PackageHash      string         `json:"packageHash,omitempty"`
+	InstalledAt      string         `json:"installedAt"`
+	Error            string         `json:"error,omitempty"`
+	FailureCount     int            `json:"failureCount,omitempty"`
+	Quarantined      bool           `json:"quarantined,omitempty"`
+	ActivationReason string         `json:"activationReason,omitempty"`
+	ActivationTimeMS float64        `json:"activationTimeMs,omitempty"`
+	ActivatedAt      string         `json:"activatedAt,omitempty"`
 }
 
 type Registry struct {
@@ -388,6 +391,19 @@ func (r *Registry) RecordRuntimeFailure(id string, failure error) error {
 		item.Quarantined = true
 		item.Error = "extension quarantined after repeated runtime failures: " + failure.Error()
 	}
+	return r.saveLocked()
+}
+
+func (r *Registry) SetActivationInfo(id, reason string, durationMS float64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	item, ok := r.items[id]
+	if !ok {
+		return fmt.Errorf("extension not found: %s", id)
+	}
+	item.ActivationReason = reason
+	item.ActivationTimeMS = durationMS
+	item.ActivatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	return r.saveLocked()
 }
 

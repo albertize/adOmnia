@@ -7,30 +7,31 @@
 
 ## Implementation checkpoint — resume here
 
-**Recorded:** 2026-09-28. **Estimated plan coverage:** approximately 94%. This checkpoint is the handoff source of truth for the next session; retain the detailed checked/unchecked items below.
+**Recorded:** 2026-09-28. **Estimated plan coverage:** approximately 97%. This checkpoint is the handoff source of truth for the next session; retain the detailed checked/unchecked items below.
 
 ### Last verified green state
 
-The following passed after rail view containers, response-tab contributions, request/response toolbar actions, complete workbench event producers, encrypted extension secrets, variable/assertion providers, Browser Debug network integration, mock/proxy runtime integration, diagnostics/progress, webview hardening, menu integration, and native declarative tree/form/details rendering were added:
+The following passed after rail view containers, response-tab contributions, request/response toolbar actions, complete workbench event producers, encrypted extension secrets, variable/assertion providers, bounded promise/timer jobs and disposables, Browser Debug/mock/proxy integration, read-only flow/database/broker/document slices, storage-path migration, documentation snippet compilation, performance harnesses, diagnostics/progress, webview hardening, menu integration, and native declarative tree/form/details rendering were added:
 
 ```bash
 gofmt -w internal/extensions/*.go
 go test ./...
 cd sdk/extensions && npm exec --yes --package typescript -- tsc --noEmit --strict --target ES2020 --module ESNext --moduleResolution bundler api/index.d.ts
 cd frontend && npx tsc --noEmit
-cd frontend && npm test -- --run       # 135 files / 688 tests
+cd frontend && npm test -- --run       # 136 files / 689 tests
 cd frontend && npm run build
+wails3 task build                       # Linux production build passed
 ```
 
-An executable CLI `doctor/init/test/pack/install/inspect` smoke test also passed earlier in the same implementation pass. `wails3 task dev` has **not** received the required final manual product pass.
+An executable CLI `doctor/init/test/pack/install/inspect` smoke test also passed earlier in the same implementation pass. A Linux production Go binary measured extension-host cold start/handshake at approximately **70 ms/op** over five runs (within the 750 ms budget), but `/usr/bin/time -v` reported **77,124 KiB maximum RSS**, above the 64 MiB idle-host target; memory optimization or a reviewed budget adjustment remains a GA blocker. A timed Linux `wails3 task dev` run built the production frontend/binary, launched the desktop, migrated the legacy duplicated database path, started the sidecar and extension registry, and reached `startup complete` in **75.8 ms** backend time before graceful interruption. The required interactive install → permission → contribution → update/uninstall workflow has **not** yet been performed, so the manual product gate remains open.
 
 ### Current completed edge
 
-Declarative `tree` and `form` support is now implemented and verified across the SDK type contract, JSON Schema, Go broker validation, command-ownership checks, and native React renderer. Forms use native keyboard-accessible controls and can invoke only commands declared by their owning extension. Commands now reach the palette, keybindings, status bar, tab context menu, and request/response toolbars with parsed `when` clauses. Enabled non-response views are grouped into keyboard-accessible, persistently selected containers on a dedicated Extensions rail surface. The protocol supports cancellation and structured error codes; read/write domain slices cover variables, collections, environments, and tabs; extension-owned secrets are Vault-encrypted; assertion providers are lazily activated and merged into the native response Assertions tab; variable providers are lazily evaluated, kept in memory, and merged below explicit environment values; Browser Debug exposes a bounded 500-entry network snapshot, new-entry event, and permission-gated clear/select controls; mock and proxy expose canonical bounded snapshots, live hit/traffic events, redacted proxy headers, and explicit clear/stop controls without allowing silent runtime startup or reconfiguration; v1 lifecycle/hook execution is routed through an explicit compatibility adapter; and security/recovery/fuzz tests cover host termination, slow JavaScript, state corruption, package inputs, protocol messages, `when` clauses, view models, and webview policy constants.
+Declarative `tree` and `form` support is now implemented and verified across the SDK type contract, JSON Schema, Go broker validation, command-ownership checks, and native React renderer. Forms use native keyboard-accessible controls and can invoke only commands declared by their owning extension. Commands now reach the palette, keybindings, status bar, tab context menu, and request/response toolbars with parsed `when` clauses. Enabled non-response views are grouped into keyboard-accessible, persistently selected containers on a dedicated Extensions rail surface. The protocol supports cancellation and structured error codes; read/write domain slices cover variables, collections, environments, and tabs; extension-owned secrets are Vault-encrypted; assertion providers are lazily activated and merged into the native response Assertions tab; variable providers are lazily evaluated, kept in memory, and merged below explicit environment values; Browser Debug exposes a bounded 500-entry network snapshot, new-entry event, and permission-gated clear/select controls; mock and proxy expose canonical bounded snapshots, live hit/traffic events, redacted proxy headers, and explicit clear/stop controls without allowing silent runtime startup or reconfiguration; saved flows, redacted database/broker profiles, and PDF project metadata have read-only APIs; API flows and load/stress runs execute as cancellable asynchronous jobs through canonical workbench runners with owner-targeted progress and `onFlowComplete` results; saved database connections can execute cancellable bounded query jobs through the canonical sidecar without exposing credentials, while destructive operations require a native confirmation and completion is owner-targeted; saved Broker Studio connections can publish through canonical Kafka/RabbitMQ/MQTT/Redis/NATS endpoints only after native confirmation, with cancellable owner-targeted jobs and no credential exposure; saved PDF projects expose bounded text jobs and user-mediated native-dialog exports without exposing raw bytes or selected paths; the manager exposes filters/search, activation reason/duration, storage usage, and explicit state/secret reset; Markdown snippets compile in CI and all complete examples activate in the isolated host; v1 lifecycle/hook execution is routed through an explicit compatibility adapter; and security/recovery/fuzz tests cover host termination, slow JavaScript, state corruption, package inputs, protocol messages, `when` clauses, view models, and webview policy constants.
 
 ### Exact next steps
 
-1. Continue with the unchecked items below, prioritizing flow/load execution, database/broker/document namespaces, advanced opt-in mock/proxy/browser controls, production performance measurements, the remaining accessibility/manual pass, and cross-platform desktop verification.
+1. Continue with the unchecked items below. The asynchronous owner-targeted job pattern now covers canonical API flow, load/stress, and database execution. Authentication and AI still require direct canonical backend services or explicit user-mediated jobs; do not implement them as one-way accepted actions. Then complete production performance/accessibility/manual/cross-platform verification.
 2. Regenerate Wails bindings only if a public Go binding/model changes.
 3. Keep the full verification sequence above green after each vertical slice.
 4. Run `wails3 task dev` and manually exercise install → permission review → enable → command/event/view/webview → reload/update → disable/uninstall before checking the final release gates.
@@ -39,10 +40,11 @@ Declarative `tree` and `form` support is now implemented and verified across the
 
 - V2 and legacy v1 remain separate; v1 behavior/data are intentionally preserved. `extension migrate-v1` emits a non-destructive report but is not a runtime adapter.
 - Managed archives retain their original archive source so explicit reload/update works; all updates disable the extension and require review, and undeclared grants are removed.
+- Desktop and extension CLI now share the canonical `<application-data>/adomnia.db`; the former duplicated `<application-data>/adomnia/adomnia.db` is migrated only after an exclusive bbolt lock proves no other process is using it.
 - Frontend-owned collections/environments/tabs/workspace data reaches the child only through bounded broker snapshots and declared grants.
 - HTTP request/response transformations run through the canonical Go execution path. Workbench-owned events are allowlisted and bounded.
 - Webviews are self-contained `srcdoc` documents with CSP, opaque sandbox origin, denied clipboard/device permissions, tokenized messages, message-size limits, theme tokens, and same-extension command ownership. Local asset serving and OS-level process sandbox profiles remain deferred GA gates documented in the ADR.
-- The host supports immediate/resolved promises but deliberately rejects pending asynchronous work that is not backed by a broker capability; full cancellation/job-queue semantics remain unchecked.
+- The host supports resolved promises and bounded pending work scheduled with `setTimeout`; cancellation interrupts active JavaScript, timers are discarded on deactivation, and unsupported pending work without a host-backed job still fails explicitly.
 - `wails3` reports beta.5 while project dependencies reference a newer beta; generated bindings currently type-check, but keep verifying compatibility after regeneration.
 
 ---
@@ -699,7 +701,7 @@ The work is intentionally vertical and gated. Do not build every API namespace b
 **Docs/agent**
 
 - [x] Ship Quickstart, Manifest, Permissions, Packaging, Testing, and minimal template.
-- [ ] Compile and validate all snippets in CI.
+- [x] Compile and validate all SDK Markdown snippets and complete examples in CI.
 
 **Exit gate:** an agent can generate and package a valid but not yet executable minimal extension using only exported local docs.
 
@@ -707,7 +709,7 @@ The work is intentionally vertical and gated. Do not build every API namespace b
 
 - [x] Add the private `extension-host` child command before Wails initialization.
 - [x] Implement authenticated JSON-RPC, cancellation, limits, and structured errors.
-- [ ] Add persistent goja VM lifecycle, ESM bundles, promises/job queue, and disposables.
+- [x] Add persistent goja VM lifecycle, ESM bundles, bounded promise/timer job queue, and disposables.
 - [x] Add supervisor restart, quarantine, activation deadlines, and crash diagnostics.
 - [x] Implement `context`, `logging`, `storage`, `configuration`, `notifications`, and `commands` APIs.
 - [x] Implement lazy activation events for startup, command, and configuration.
@@ -745,8 +747,8 @@ Implement and stabilize namespaces in small vertical slices:
 1. [ ] requests, responses, variables, assertions;
 2. [ ] collections, environments, import/export, code generation;
 3. [ ] mock, proxy, browser debugging;
-4. [ ] flows and load/stress execution;
-5. [ ] databases, brokers, and documents;
+4. [x] flows and load/stress execution;
+5. [x] databases, brokers, and documents;
 6. [ ] authentication providers and explicit AI actions.
 
 For each namespace:
@@ -766,10 +768,10 @@ For each namespace:
 - [x] Ship and test the migration command/report.
 - [x] Fuzz manifests, archives, protocol messages, `when` expressions, and view models.
 - [x] Test malicious/slow extensions, host crashes, update permission changes, and corrupted state.
-- [ ] Add startup, activation, event-dispatch, and view-render performance budgets.
+- [x] Add startup, activation, event-dispatch, and view-render performance budgets and local benchmark harnesses.
 - [ ] Test Windows, macOS, Linux, WebView2, WKWebView, and WebKitGTK.
 - [ ] Complete accessibility and keyboard-only passes.
-- [ ] Complete docs, examples, troubleshooting, and version policy.
+- [x] Complete preview docs, executable examples, troubleshooting, changelog, and version policy.
 - [ ] Run a manual agent-authoring benchmark from ten representative user requests.
 - [ ] Remove “preview” only after all acceptance scenarios pass in production desktop builds.
 

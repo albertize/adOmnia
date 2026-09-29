@@ -195,7 +195,7 @@ func (a *App) OnStartup(ctx context.Context) {
 	}
 	devlog.Info("OnStartup", "avvio applicazione in corso", nil)
 	stageStarted = time.Now()
-	if err := storage.Open(dataDir()); err != nil {
+	if err := storage.OpenApplicationDataDir(dataDir()); err != nil {
 		log.Printf("[app] WARNING: could not open bbolt DB: %v", err)
 		devlog.Err("OnStartup", "apertura bbolt DB fallita", err, nil)
 	} else {

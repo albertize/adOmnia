@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Braces, List, ListTree, Send, Table2 } from 'lucide-react'
 import { executeExtensionCommand, openExtensionView } from '@/lib/extensions-v2-api'
 
-interface DeclarativeViewState {
+export interface DeclarativeViewState {
   kind: 'empty' | 'list' | 'tree' | 'table' | 'form' | 'details' | 'markdown' | 'json'
   title?: string
   message?: string
@@ -18,6 +18,7 @@ interface Props {
   extensionId: string
   viewId: string
   name: string
+  initialState?: DeclarativeViewState | null
 }
 
 function parseState(value: string): DeclarativeViewState | null {
@@ -25,8 +26,8 @@ function parseState(value: string): DeclarativeViewState | null {
   try { return JSON.parse(value) as DeclarativeViewState } catch { return null }
 }
 
-export function ExtensionDeclarativeView({ extensionId, viewId, name }: Props) {
-  const [state, setState] = useState<DeclarativeViewState | null>(null)
+export function ExtensionDeclarativeView({ extensionId, viewId, name, initialState = null }: Props) {
+  const [state, setState] = useState<DeclarativeViewState | null>(initialState)
   const [formValues, setFormValues] = useState<Record<string, unknown>>({})
   const [actionResult, setActionResult] = useState('')
   const [busyAction, setBusyAction] = useState<string | null>(null)

@@ -1,0 +1,19 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.broker-publisher-example",
+  "name": "Broker Publisher Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Publishes a confirmed message through an existing Broker Studio connection.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onCommand:adomnia.broker-publisher-example.publish", "onBrokerPublishComplete", "onView:adomnia.broker-publisher-example.results"],
+  "permissions": ["brokers.publish"],
+  "contributes": {
+    "commands": [{ "id": "adomnia.broker-publisher-example.publish", "title": "Publish broker message", "category": "Broker" }],
+    "views": [{ "id": "adomnia.broker-publisher-example.results", "container": "flow-analysis", "name": "Broker Publish Results", "renderer": "declarative" }]
+  }
+}

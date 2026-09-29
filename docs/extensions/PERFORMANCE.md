@@ -6,11 +6,11 @@ The release budgets are defined in [`../EXTENSION-PLATFORM-PLAN.md`](../EXTENSIO
 
 ```bash
 go test ./internal/extensions -run '^$' \
-  -bench 'Benchmark(ExtensionManifestDiscovery100|DeclarativeViewValidation1000Rows|HostEventDispatch)$' \
+  -bench 'Benchmark(ExtensionManifestDiscovery100|DeclarativeViewValidation1000Rows|HostWarmActivation|HostEventDispatch)$' \
   -benchmem -count=5
 ```
 
-This reports manifest decode/validation for 100 inactive packages, validation of a 1,000-row declarative table model, and authenticated in-process protocol/event overhead. It intentionally does not hide extension execution time inside the broker measurement.
+This reports manifest decode/validation for 100 inactive packages, validation of a 1,000-row declarative table model, warm activation, and authenticated in-process protocol/event overhead. It intentionally does not hide extension execution time inside the broker measurement.
 
 Measure a production extension-host process start and authenticated handshake with:
 
@@ -20,6 +20,14 @@ ADOMNIA_EXTENSION_PERF_EXECUTABLE=/absolute/path/to/adomnia \
 ```
 
 Use a production binary from the target platform. Do not use `go test` binaries as the child executable.
+
+Run the focused React 1,000-row rendering measurement (it also remains in the normal frontend suite as a regression smoke test):
+
+```bash
+cd frontend && npm run bench:extensions
+```
+
+The server-render benchmark detects relative renderer regressions. The GA budget still requires a real WebView commit/input measurement.
 
 ## Required manual production measurements
 

@@ -81,6 +81,12 @@ export function GetRuntimeStatus(): $CancellablePromise<extensions$0.RuntimeStat
     });
 }
 
+export function GetStorageUsage(extensionID: string): $CancellablePromise<extensions$0.ExtensionStorageUsage> {
+    return $Call.ByID(1341702544, extensionID).then(($result: any) => {
+        return $$createType14($result);
+    });
+}
+
 export function GetViewState(extensionID: string, viewID: string): $CancellablePromise<string> {
     return $Call.ByID(527321214, extensionID, viewID);
 }
@@ -113,6 +119,26 @@ export function Reload(id: string): $CancellablePromise<extensions$0.ExtensionIn
     return $Call.ByID(653230909, id).then(($result: any) => {
         return $$createType2($result);
     });
+}
+
+export function ReportBrokerJobEvent(extensionID: string, jobID: string, payloadJSON: string): $CancellablePromise<void> {
+    return $Call.ByID(2828675402, extensionID, jobID, payloadJSON);
+}
+
+export function ReportDatabaseJobEvent(extensionID: string, jobID: string, payloadJSON: string): $CancellablePromise<void> {
+    return $Call.ByID(2096345250, extensionID, jobID, payloadJSON);
+}
+
+export function ReportDocumentJobEvent(extensionID: string, jobID: string, event: string, payloadJSON: string): $CancellablePromise<void> {
+    return $Call.ByID(2037588818, extensionID, jobID, event, payloadJSON);
+}
+
+export function ReportFlowJobEvent(extensionID: string, jobID: string, event: string, payloadJSON: string): $CancellablePromise<void> {
+    return $Call.ByID(3210638379, extensionID, jobID, event, payloadJSON);
+}
+
+export function ResetStorage(extensionID: string): $CancellablePromise<void> {
+    return $Call.ByID(446188412, extensionID);
 }
 
 export function SetDomainContext(contextJSON: string): $CancellablePromise<void> {
@@ -154,3 +180,4 @@ const $$createType10 = $Create.Array($$createType2);
 const $$createType11 = extensions$0.ExtensionLog.createFrom;
 const $$createType12 = $Create.Array($$createType11);
 const $$createType13 = extensions$0.RuntimeStatus.createFrom;
+const $$createType14 = extensions$0.ExtensionStorageUsage.createFrom;

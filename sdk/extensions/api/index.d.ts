@@ -50,6 +50,12 @@ export interface EventsAPI {
   onBrowserNetwork(handler: EventHandler): Disposable
   onMockHit(handler: EventHandler): Disposable
   onProxyTraffic(handler: EventHandler): Disposable
+  onFlowProgress(handler: EventHandler): Disposable
+  onFlowComplete(handler: EventHandler): Disposable
+  onDatabaseComplete(handler: EventHandler): Disposable
+  onBrokerPublishComplete(handler: EventHandler): Disposable
+  onDocumentReadComplete(handler: EventHandler): Disposable
+  onDocumentWriteComplete(handler: EventHandler): Disposable
 }
 
 export interface DeclarativeViewState {
@@ -147,6 +153,35 @@ export interface MockAPI {
   stop(): Promise<void>
 }
 
+export interface DocumentsAPI<T = Record<string, unknown>> {
+  listPdfProjects(): Promise<readonly T[]>
+  readPdfText(projectId: string, options?: { pages?: readonly number[] }): Promise<{ jobId: string }>
+  exportPdf(projectId: string, options?: { flatten?: boolean; suggestedName?: string }): Promise<{ jobId: string }>
+  cancel(jobId: string): Promise<void>
+}
+
+export interface ConnectionMetadataAPI<T = Record<string, unknown>> {
+  listConnections(): Promise<readonly T[]>
+}
+
+export interface DatabasesAPI<T = Record<string, unknown>> extends ConnectionMetadataAPI<T> {
+  execute(connectionId: string, query: string, options?: { limit?: number; timeoutMs?: number; explain?: boolean }): Promise<{ jobId: string }>
+  cancel(jobId: string): Promise<void>
+}
+
+export interface BrokersAPI<T = Record<string, unknown>> extends ConnectionMetadataAPI<T> {
+  publish(connectionId: string, destination: string, message: string, options?: { key?: string; headers?: Record<string, string>; qos?: 0 | 1 | 2; retained?: boolean; persistent?: boolean; contentType?: string; partition?: number }): Promise<{ jobId: string }>
+  cancel(jobId: string): Promise<void>
+}
+
+export interface FlowsAPI<T = Record<string, unknown>> {
+  list(): Promise<readonly T[]>
+  get(id: string): Promise<T | null>
+  execute(id: string, options?: { startNodeId?: string }): Promise<{ jobId: string }>
+  executeStress(id: string, config: Record<string, unknown>): Promise<{ jobId: string }>
+  cancel(jobId: string): Promise<void>
+}
+
 export interface ProxyAPI {
   getSnapshot<T = Record<string, unknown>>(): Promise<T>
   clearTraffic(): Promise<void>
@@ -205,6 +240,10 @@ export interface ExtensionAPI {
   readonly browserDebug: BrowserDebugAPI
   readonly mock: MockAPI
   readonly proxy: ProxyAPI
+  readonly flows: FlowsAPI
+  readonly databases: DatabasesAPI
+  readonly brokers: BrokersAPI
+  readonly documents: DocumentsAPI
   readonly diagnostics: DiagnosticsAPI
   readonly progress: ProgressAPI
   readonly views: ViewsAPI

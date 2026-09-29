@@ -1,0 +1,16 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.document-catalog-example",
+  "name": "Document Catalog Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Lists local PDF project metadata without document contents.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onView:adomnia.document-catalog-example.projects"],
+  "permissions": ["documents.read"],
+  "contributes": { "views": [{ "id": "adomnia.document-catalog-example.projects", "container": "document-analysis", "name": "PDF Projects", "renderer": "declarative" }] }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.document-worker-example",
+  "name": "Document Worker Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Reads bounded PDF text and exports a PDF through a user-selected destination.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onCommand:adomnia.document-worker-example.read", "onCommand:adomnia.document-worker-example.export", "onDocumentReadComplete", "onDocumentWriteComplete", "onView:adomnia.document-worker-example.results"],
+  "permissions": ["documents.readContents", "documents.write"],
+  "contributes": {
+    "commands": [
+      { "id": "adomnia.document-worker-example.read", "title": "Read PDF project text", "category": "Documents" },
+      { "id": "adomnia.document-worker-example.export", "title": "Export PDF project", "category": "Documents" }
+    ],
+    "views": [{ "id": "adomnia.document-worker-example.results", "container": "flow-analysis", "name": "Document Job Results", "renderer": "declarative" }]
+  }
+}

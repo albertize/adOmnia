@@ -1,0 +1,22 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.flow-runner-example",
+  "name": "Flow Runner Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Starts cancellable canonical flow jobs and renders completion summaries.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onCommand:adomnia.flow-runner-example.run", "onCommand:adomnia.flow-runner-example.stress", "onFlowProgress", "onFlowComplete", "onView:adomnia.flow-runner-example.results"],
+  "permissions": ["flows.execute"],
+  "contributes": {
+    "commands": [
+      { "id": "adomnia.flow-runner-example.run", "title": "Run saved flow by ID", "category": "Flows" },
+      { "id": "adomnia.flow-runner-example.stress", "title": "Smoke-test saved flow by ID", "category": "Flows" }
+    ],
+    "views": [{ "id": "adomnia.flow-runner-example.results", "container": "flow-analysis", "name": "Flow Job Results", "renderer": "declarative" }]
+  }
+}

@@ -195,7 +195,7 @@ func extensionDoctor(args []string, stdout, stderr io.Writer) int {
 
 func openCLIRegistry() (*extensions.Registry, func(), error) {
 	dataDir := cliApplicationDataDir()
-	if err := storage.Open(dataDir); err != nil {
+	if err := storage.OpenApplicationDataDir(dataDir); err != nil {
 		return nil, func() {}, fmt.Errorf("open adOmnia storage (is the desktop app running?): %w", err)
 	}
 	registry := extensions.NewRegistry(dataDir)

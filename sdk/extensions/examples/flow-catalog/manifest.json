@@ -1,0 +1,19 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.flow-catalog-example",
+  "name": "Flow Catalog Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Lists locally saved API flows without executing them.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onView:adomnia.flow-catalog-example.flows", "onCommand:adomnia.flow-catalog-example.refresh"],
+  "permissions": ["flows.read"],
+  "contributes": {
+    "commands": [{ "id": "adomnia.flow-catalog-example.refresh", "title": "Refresh saved flows", "category": "Flows" }],
+    "views": [{ "id": "adomnia.flow-catalog-example.flows", "container": "flow-analysis", "name": "Saved Flows", "renderer": "declarative" }]
+  }
+}
