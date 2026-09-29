@@ -102,6 +102,8 @@ func extensionTest(args []string, stdout, stderr io.Writer) int {
 			return map[string]bool{"ok": true}, nil
 		case "requests.getActive", "responses.getActive":
 			return map[string]interface{}{}, nil
+		case "domains.action":
+			return map[string]bool{"ok": true}, nil
 		case "requests.execute":
 			requestJSON, err := json.Marshal(params["request"])
 			if err != nil {

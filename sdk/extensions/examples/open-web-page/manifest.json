@@ -1,0 +1,23 @@
+{
+  "$schema": "https://adomnia.local/schemas/extension-manifest-v2.json",
+  "manifestVersion": 2,
+  "id": "adomnia.open-web-page-example",
+  "name": "Open Web Page",
+  "version": "0.1.0",
+  "publisher": "adomnia",
+  "description": "Open a manually entered HTTP(S) URL in a new adOmnia request tab.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=1.0.0 <2" },
+  "apiVersion": "2.0",
+  "main": "src/extension.js",
+  "activationEvents": ["onView:adomnia.open-web-page-example.open", "onCommand:adomnia.open-web-page-example.open"],
+  "permissions": ["tabs.write"],
+  "contributes": {
+    "commands": [
+      { "id": "adomnia.open-web-page-example.open", "title": "Open Web Page", "category": "Open Web Page" }
+    ],
+    "views": [
+      { "id": "adomnia.open-web-page-example.open", "container": "analysis", "name": "Open Web Page", "renderer": "declarative" }
+    ]
+  }
+}
