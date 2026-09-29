@@ -11,6 +11,7 @@
 - Added cancellable database query jobs through saved connections and the canonical sidecar, with Vault credential isolation, bounded results, ownership checks, and native confirmation for destructive operations.
 - Added cancellable, natively confirmed broker publish jobs through saved Kafka, RabbitMQ, MQTT, Redis, and NATS connections without exposing credentials.
 - Added bounded PDF text jobs and native-dialog PDF export jobs without exposing raw document bytes or selected filesystem paths.
+- Added cancellable AI completion jobs with per-request native consent and no provider credential exposure.
 - Added local CLI, embedded Markdown SDK, schemas, templates, recipes, executable examples, fuzz targets, and performance harnesses.
 
 Preview limitations and deferred GA gates remain authoritative in the repository `docs/ADR-EXTENSION-V2.md` and `docs/EXTENSION-PLATFORM-PLAN.md`.

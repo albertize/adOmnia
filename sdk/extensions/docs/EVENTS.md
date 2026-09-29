@@ -14,7 +14,7 @@ An activation event says when extension code may be loaded. It is not an event s
 - `onVariables`
 - `onBrowserNetwork`
 - `onMockHit`, `onProxyTraffic`
-- `onFlowProgress`, `onFlowComplete`, `onDatabaseComplete`, `onBrokerPublishComplete`, `onDocumentReadComplete`, `onDocumentWriteComplete`
+- `onFlowProgress`, `onFlowComplete`, `onDatabaseComplete`, `onBrokerPublishComplete`, `onDocumentReadComplete`, `onDocumentWriteComplete`, `onAIComplete`
 - `onCommand:<contributed-command-id>`
 - `onView:<contributed-view-id>`
 
@@ -47,6 +47,7 @@ Command and view activation references are checked against static contributions.
 | `onBrokerPublishComplete` | Canonical Broker Studio sidecar | Targeted acknowledgement/failure for a confirmed publish owned by the extension; requires `brokers.publish`. |
 | `onDocumentReadComplete` | Canonical PDF Editor loader/text extractor | Targeted bounded text result/failure; requires `documents.readContents`. |
 | `onDocumentWriteComplete` | Canonical PDF Editor exporter and native Save dialog | Targeted save/cancellation result without disclosing the selected path; requires `documents.write`. |
+| `onAIComplete` | Canonical configured AI engine after native consent | Targeted bounded completion/cancellation result; requires `ai.execute`. |
 
 
 Register handlers through `api.events.onResponse(handler)` or `api.events.on(name, handler)`. A transform returns `{ modified: true, data: payload }`; returning nothing observes without modification. Handlers execute serially inside the extension VM with a deadline. Notification-style concurrency will be introduced only after the remaining producers have typed payloads.

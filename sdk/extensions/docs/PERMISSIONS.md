@@ -29,6 +29,7 @@ Permissions declare intent and the Go desktop broker enforces grants again for e
 | `brokers.publish` | Start/cancel confirmed publish jobs through saved Kafka, RabbitMQ, MQTT, Redis, or NATS connections. Credentials remain broker-owned. |
 | `documents.readContents` | Extract bounded text from saved PDF Editor projects; raw PDF bytes are not returned. |
 | `documents.write` | Export a saved PDF project only through the native user-controlled Save dialog; the chosen path is not returned. |
+| `ai.execute` | Request a bounded completion from the user's configured AI provider. Every request requires native consent and provider credentials are never exposed. |
 | `documents.read` | List lightweight PDF project metadata without bytes, annotations, form values, or filesystem access. |
 | `network:<origin>` | Allow a webview `connect-src` to one exact HTTP(S) or WebSocket origin. It does not expose fetch to extension-host code. |
 

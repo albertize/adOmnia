@@ -246,6 +246,18 @@ func TestValidateManifestDocumentCompletionRequiresScopedPermissions(t *testing.
 	}
 }
 
+func TestValidateManifestAICompletionRequiresExecutePermission(t *testing.T) {
+	manifest := validTestManifest()
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onAIComplete")
+	if diagnostics := ValidateManifest(manifest); !hasDiagnostic(diagnostics, "activation.permission") {
+		t.Fatalf("missing AI execute permission diagnostic: %#v", diagnostics)
+	}
+	manifest.Permissions = append(manifest.Permissions, "ai.execute")
+	if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+		t.Fatalf("valid AI completion diagnostics: %#v", diagnostics)
+	}
+}
+
 func validTestManifest() Manifest {
 	return Manifest{
 		ManifestVersion:  SupportedManifestVersion,

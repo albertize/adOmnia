@@ -6,7 +6,7 @@ import { useCollectionsStore } from '@/stores/collections'
 import { useEnvironmentsStore } from '@/stores/environments'
 import { useSettingsStore } from '@/stores/settings'
 import { useBrowserDebugStore } from '@/stores/browser-debug'
-import { evaluateExtensionVariableProviders, reportExtensionBrokerJob, reportExtensionDatabaseJob, reportExtensionDocumentJob, reportExtensionFlowJob, setExtensionDomainContext } from '@/lib/extensions-v2-api'
+import { evaluateExtensionVariableProviders, reportExtensionAIJob, reportExtensionBrokerJob, reportExtensionDatabaseJob, reportExtensionDocumentJob, reportExtensionFlowJob, setExtensionDomainContext } from '@/lib/extensions-v2-api'
 import { evaluateWhen, type ExtensionContextValues } from '@/lib/extensionContext'
 import type { Collection, RequestItem } from '@/lib/types'
 import { loadFlowDefinitions } from '@/lib/flowStorage'
@@ -20,11 +20,14 @@ import { listAllBrokerConnectionProfiles, resolveBrokerPayload, type BrokerConne
 import { serverUrl, sidecarFetch, useServerPort } from '@/lib/useServerPort'
 import { bytesToBase64, loadProject } from '@/lib/pdf/pdfProjects'
 import * as AppBindings from '../../../bindings/adomnia/app'
+import * as AIEngineBindings from '../../../bindings/adomnia/aiengine'
+import { ensureAIConfigured } from '@/lib/aiEngine'
 
 const extensionFlowJobs = new Map<string, AbortController>()
 const extensionDatabaseJobs = new Map<string, AbortController>()
 const extensionBrokerJobs = new Map<string, AbortController>()
 const extensionDocumentJobs = new Map<string, AbortController>()
+const extensionAIJobs = new Map<string, AbortController>()
 
 type ExtensionBrokerPublishOptions = { key?: unknown; headers?: unknown; qos?: unknown; retained?: unknown; persistent?: unknown; contentType?: unknown; partition?: unknown }
 
@@ -174,6 +177,38 @@ export function ExtensionContributionHost() {
               if (!entry) throw new Error('browser network entry not found')
               useBrowserDebugStore.getState().setSelectedEntry(entry)
             }
+          } else if (message.domain === 'ai' && message.action === 'cancel') {
+            const jobId = message.payload.jobId
+            if (typeof jobId !== 'string') throw new Error('invalid AI job ID')
+            extensionAIJobs.get(`${extensionId}:${jobId}`)?.abort()
+          } else if (message.domain === 'ai' && message.action === 'complete') {
+            const jobId = message.payload.jobId
+            const systemPrompt = message.payload.systemPrompt
+            const userPrompt = message.payload.userPrompt
+            const maxTokens = message.payload.maxTokens
+            if (typeof jobId !== 'string' || typeof systemPrompt !== 'string' || typeof userPrompt !== 'string' || typeof maxTokens !== 'number') throw new Error('invalid AI job payload')
+            const key = `${extensionId}:${jobId}`
+            if (extensionAIJobs.has(key)) throw new Error('AI job already exists')
+            const controller = new AbortController()
+            extensionAIJobs.set(key, controller)
+            void confirm({
+              title: 'Extension AI request',
+              message: `${installed.manifest.name} wants to send the following prompt to your configured AI provider.\n\n${userPrompt.slice(0, 1000)}`,
+              confirmLabel: 'Send to AI', variant: 'danger',
+            }).then(async (approved) => {
+              if (!approved) throw new Error('AI request cancelled by user')
+              await ensureAIConfigured()
+              if (controller.signal.aborted) throw new DOMException('AI job cancelled', 'AbortError')
+              const completion = AIEngineBindings.Complete(systemPrompt, userPrompt, Math.max(1, Math.min(4000, Math.round(maxTokens))))
+              const abort = () => completion.cancel()
+              controller.signal.addEventListener('abort', abort, { once: true })
+              try {
+                const result = await completion
+                await reportExtensionAIJob(extensionId, jobId, { success: true, result })
+              } finally {
+                controller.signal.removeEventListener('abort', abort)
+              }
+            }).catch((error: unknown) => reportExtensionAIJob(extensionId, jobId, { success: false, error: error instanceof Error ? error.message : String(error) })).catch(() => undefined).finally(() => extensionAIJobs.delete(key))
           } else if (message.domain === 'documents' && message.action === 'cancel') {
             const jobId = message.payload.jobId
             if (typeof jobId !== 'string') throw new Error('invalid document job ID')

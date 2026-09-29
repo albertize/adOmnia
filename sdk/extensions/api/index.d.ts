@@ -56,6 +56,7 @@ export interface EventsAPI {
   onBrokerPublishComplete(handler: EventHandler): Disposable
   onDocumentReadComplete(handler: EventHandler): Disposable
   onDocumentWriteComplete(handler: EventHandler): Disposable
+  onAIComplete(handler: EventHandler): Disposable
 }
 
 export interface DeclarativeViewState {
@@ -174,6 +175,11 @@ export interface BrokersAPI<T = Record<string, unknown>> extends ConnectionMetad
   cancel(jobId: string): Promise<void>
 }
 
+export interface AIAPI {
+  complete(systemPrompt: string, userPrompt: string, options?: { maxTokens?: number }): Promise<{ jobId: string }>
+  cancel(jobId: string): Promise<void>
+}
+
 export interface FlowsAPI<T = Record<string, unknown>> {
   list(): Promise<readonly T[]>
   get(id: string): Promise<T | null>
@@ -233,6 +239,7 @@ export interface ExtensionAPI {
   readonly responses: ResponsesAPI
   readonly variables: VariablesAPI
   readonly assertions: AssertionsAPI
+  readonly ai: AIAPI
   readonly environments: EnvironmentsAPI
   readonly collections: CollectionsAPI
   readonly tabs: TabsAPI

@@ -77,6 +77,10 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 			return map[string]bool{"accepted": true}, nil
 		case "brokers.listConnections":
 			return []map[string]any{{"id": "broker-1"}}, nil
+		case "ai.startComplete":
+			return map[string]any{"jobId": "ai-job-1"}, nil
+		case "ai.cancel":
+			return map[string]bool{"accepted": true}, nil
 		case "flows.start":
 			return map[string]any{"jobId": "job-1"}, nil
 		case "flows.startStress":
@@ -111,8 +115,8 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 		t.Fatalf("initialize error = %v", err)
 	}
 	manifest := validTestManifest()
-	manifest.Permissions = []string{"notifications", "globalState", "secrets.own", "responses.read", "collections.read", "variables.read", "variables.provide", "assertions.provide", "browserDebug.read", "browserDebug.control", "mock.read", "mock.control", "proxy.read", "proxy.control", "flows.read", "flows.execute", "databases.read", "databases.execute", "brokers.read", "brokers.publish", "documents.read", "documents.readContents", "documents.write"}
-	manifest.ActivationEvents = append(manifest.ActivationEvents, "onResponse", "onAssertions", "onVariables", "onBrowserNetwork", "onMockHit", "onProxyTraffic", "onFlowProgress", "onFlowComplete", "onDatabaseComplete", "onBrokerPublishComplete", "onDocumentReadComplete", "onDocumentWriteComplete")
+	manifest.Permissions = []string{"notifications", "globalState", "secrets.own", "responses.read", "collections.read", "variables.read", "variables.provide", "assertions.provide", "browserDebug.read", "browserDebug.control", "mock.read", "mock.control", "proxy.read", "proxy.control", "flows.read", "flows.execute", "databases.read", "databases.execute", "brokers.read", "brokers.publish", "documents.read", "documents.readContents", "documents.write", "ai.execute"}
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onResponse", "onAssertions", "onVariables", "onBrowserNetwork", "onMockHit", "onProxyTraffic", "onFlowProgress", "onFlowComplete", "onDatabaseComplete", "onBrokerPublishComplete", "onDocumentReadComplete", "onDocumentWriteComplete", "onAIComplete")
 	source := `
 		export async function activate(api) {
 			api.context.subscriptions.add({ dispose() { api.logging.info('disposed') } })
@@ -139,10 +143,11 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 				const brokerJob = await api.brokers.publish('broker-1', 'events', 'hello')
 				const flows = await api.flows.list()
 				const flow = await api.flows.get('flow-1')
+				const aiJob = await api.ai.complete('', 'Summarize', { maxTokens: 100 })
 				const flowJob = await api.flows.execute('flow-1')
 				const stressJob = await api.flows.executeStress('flow-1', { vus: 1, mode: 'iterations', iterations: 1 })
 				const resolved = await api.variables.resolve('{{baseUrl}}/users')
-				return { count: count + 1, collectionCount: collections.length, browserCount: browserEntries.length, mockRunning: mockSnapshot.running, proxyRunning: proxySnapshot.running, documentCount: documents.length, documentReadJobId: documentRead.jobId, documentWriteJobId: documentWrite.jobId, databaseCount: databases.length, databaseJobId: databaseJob.jobId, brokerCount: brokers.length, brokerJobId: brokerJob.jobId, flowCount: flows.length, flowId: flow.id, flowJobId: flowJob.jobId, stressJobId: stressJob.jobId, resolved, secret }
+				return { count: count + 1, collectionCount: collections.length, browserCount: browserEntries.length, mockRunning: mockSnapshot.running, proxyRunning: proxySnapshot.running, documentCount: documents.length, documentReadJobId: documentRead.jobId, documentWriteJobId: documentWrite.jobId, databaseCount: databases.length, databaseJobId: databaseJob.jobId, brokerCount: brokers.length, brokerJobId: brokerJob.jobId, flowCount: flows.length, flowId: flow.id, aiJobId: aiJob.jobId, flowJobId: flowJob.jobId, stressJobId: stressJob.jobId, resolved, secret }
 			}))
 			api.context.subscriptions.add(api.variables.registerProvider('test.extension.dynamic', (context) => ({ providedUrl: context.url })))
 			api.context.subscriptions.add(api.assertions.registerProvider('test.extension.status', (payload) => ({
@@ -158,6 +163,7 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 			api.events.onBrokerPublishComplete(() => undefined)
 			api.events.onDocumentReadComplete(() => undefined)
 			api.events.onDocumentWriteComplete(() => undefined)
+			api.events.onAIComplete(() => undefined)
 			api.context.subscriptions.add(api.events.onResponse((payload) => {
 				payload.tagged = true
 				return { modified: true, data: payload }
@@ -173,7 +179,7 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 		t.Fatalf("command result=%#v err=%v", command, err)
 	}
 	data := command.Data.(map[string]interface{})
-	if data["count"] != float64(1) || data["collectionCount"] != int64(1) && data["collectionCount"] != float64(1) || data["browserCount"] != int64(1) && data["browserCount"] != float64(1) || data["mockRunning"] != false || data["proxyRunning"] != false || data["documentCount"] != int64(1) && data["documentCount"] != float64(1) || data["documentReadJobId"] != "document-read-1" || data["documentWriteJobId"] != "document-write-1" || data["databaseCount"] != int64(1) && data["databaseCount"] != float64(1) || data["databaseJobId"] != "database-1" || data["brokerCount"] != int64(1) && data["brokerCount"] != float64(1) || data["brokerJobId"] != "broker-job-1" || data["flowCount"] != int64(1) && data["flowCount"] != float64(1) || data["flowId"] != "flow-1" || data["flowJobId"] != "job-1" || data["stressJobId"] != "stress-1" || data["resolved"] != "https://example.test/users" || data["secret"] != "local-secret" {
+	if data["count"] != float64(1) || data["collectionCount"] != int64(1) && data["collectionCount"] != float64(1) || data["browserCount"] != int64(1) && data["browserCount"] != float64(1) || data["mockRunning"] != false || data["proxyRunning"] != false || data["documentCount"] != int64(1) && data["documentCount"] != float64(1) || data["documentReadJobId"] != "document-read-1" || data["documentWriteJobId"] != "document-write-1" || data["databaseCount"] != int64(1) && data["databaseCount"] != float64(1) || data["databaseJobId"] != "database-1" || data["brokerCount"] != int64(1) && data["brokerCount"] != float64(1) || data["brokerJobId"] != "broker-job-1" || data["flowCount"] != int64(1) && data["flowCount"] != float64(1) || data["flowId"] != "flow-1" || data["aiJobId"] != "ai-job-1" || data["flowJobId"] != "job-1" || data["stressJobId"] != "stress-1" || data["resolved"] != "https://example.test/users" || data["secret"] != "local-secret" {
 		t.Fatalf("command data = %#v", data)
 	}
 	var event HostExecutionResult
@@ -201,6 +207,10 @@ func TestExtensionHostActivatesCommandsStateNotificationsAndEvents(t *testing.T)
 		if err := client.Request(ctx, "dispatchEvent", DispatchEventRequest{ExtensionID: manifest.ID, Event: documentEvent, Payload: map[string]any{"success": true}}, &result); err != nil || !result.Success {
 			t.Fatalf("%s result=%#v err=%v", documentEvent, result, err)
 		}
+	}
+	var aiEvent HostExecutionResult
+	if err := client.Request(ctx, "dispatchEvent", DispatchEventRequest{ExtensionID: manifest.ID, Event: "onAIComplete", Payload: map[string]any{"jobId": "ai-job-1", "success": true}}, &aiEvent); err != nil || !aiEvent.Success {
+		t.Fatalf("AI event result=%#v err=%v", aiEvent, err)
 	}
 	var variableResults HostExecutionResult
 	if err := client.Request(ctx, "evaluateVariableProviders", EvaluateVariableProvidersRequest{ExtensionID: manifest.ID, Context: map[string]any{"url": "https://provided.test"}}, &variableResults); err != nil || !variableResults.Success {

@@ -121,6 +121,10 @@ export function Reload(id: string): $CancellablePromise<extensions$0.ExtensionIn
     });
 }
 
+export function ReportAIJobEvent(extensionID: string, jobID: string, payloadJSON: string): $CancellablePromise<void> {
+    return $Call.ByID(2969139505, extensionID, jobID, payloadJSON);
+}
+
 export function ReportBrokerJobEvent(extensionID: string, jobID: string, payloadJSON: string): $CancellablePromise<void> {
     return $Call.ByID(2828675402, extensionID, jobID, payloadJSON);
 }

@@ -139,7 +139,7 @@ func TestServiceBrokersGrantedDomainActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest.Permissions = append(manifest.Permissions, "tabs.write", "browserDebug.control", "mock.read", "mock.control", "proxy.read", "proxy.control", "flows.read", "flows.execute", "databases.read", "databases.execute", "brokers.read", "brokers.publish", "documents.read", "documents.readContents", "documents.write")
+	manifest.Permissions = append(manifest.Permissions, "tabs.write", "browserDebug.control", "mock.read", "mock.control", "proxy.read", "proxy.control", "flows.read", "flows.execute", "databases.read", "databases.execute", "brokers.read", "brokers.publish", "documents.read", "documents.readContents", "documents.write", "ai.execute")
 	data, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(filepath.Join(root, ManifestFileName), data, 0644); err != nil {
 		t.Fatal(err)
@@ -207,6 +207,22 @@ func TestServiceBrokersGrantedDomainActions(t *testing.T) {
 	documents, err := service.handleHostCall(context.Background(), "documents.listPdfProjects", params)
 	if err != nil || len(documents.([]map[string]any)) != 1 || documents.([]map[string]any)[0]["annotations"] != nil {
 		t.Fatalf("documents=%#v err=%v", documents, err)
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "systemPrompt": "Be concise", "userPrompt": "Summarize this request", "options": map[string]any{"maxTokens": 200}})
+	aiStarted, err := service.handleHostCall(context.Background(), "ai.startComplete", params)
+	if err != nil || received.Domain != "ai" || received.Action != "complete" {
+		t.Fatalf("AI start=%#v action=%#v err=%v", aiStarted, received, err)
+	}
+	aiJobID := aiStarted.(map[string]any)["jobId"].(string)
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "jobId": aiJobID})
+	if _, err := service.handleHostCall(context.Background(), "ai.cancel", params); err != nil || received.Action != "cancel" {
+		t.Fatalf("AI cancel action=%#v err=%v", received, err)
+	}
+	if err := service.ReportAIJobEvent("another.extension", aiJobID, `{}`); err == nil {
+		t.Fatal("AI job ownership was not enforced")
+	}
+	if err := service.ReportAIJobEvent(installed.Manifest.ID, aiJobID, `{"success":false,"error":"cancelled"}`); err == nil {
+		t.Fatal("AI completion without an active host unexpectedly succeeded")
 	}
 	for _, documentJob := range []struct{ method, action, event string }{{"documents.startReadText", "readText", "onDocumentReadComplete"}, {"documents.startExport", "export", "onDocumentWriteComplete"}} {
 		params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "projectId": "pdf-1", "options": map[string]any{}})
@@ -322,6 +338,12 @@ func TestServiceBrokersGrantedDomainActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	lastDocumentJobID := lastDocumentJob.(map[string]any)["jobId"].(string)
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "systemPrompt": "", "userPrompt": "Summarize", "options": map[string]any{}})
+	lastAIJob, err := service.handleHostCall(context.Background(), "ai.startComplete", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastAIJobID := lastAIJob.(map[string]any)["jobId"].(string)
 	if _, err := service.Disable(installed.Manifest.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +353,7 @@ func TestServiceBrokersGrantedDomainActions(t *testing.T) {
 			cancelled[action.Domain] = action.Payload["jobId"].(string)
 		}
 	}
-	if cancelled["flows"] != secondJobID || cancelled["databases"] != lastDatabaseJobID || cancelled["brokers"] != lastBrokerJobID || cancelled["documents"] != lastDocumentJobID {
+	if cancelled["flows"] != secondJobID || cancelled["databases"] != lastDatabaseJobID || cancelled["brokers"] != lastBrokerJobID || cancelled["documents"] != lastDocumentJobID || cancelled["ai"] != lastAIJobID {
 		t.Fatalf("disable did not cancel owned jobs: %#v", finalActions)
 	}
 }
@@ -422,8 +444,8 @@ func TestServiceDispatchesWorkbenchAndDomainLifecycleEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest.ActivationEvents = []string{"onStartup", "onCommand:test.events.seen", "onWorkspaceOpen", "onWorkspaceClose", "onEnvChange", "onThemeChange", "onTabOpen", "onTabClose", "onSave", "onImport", "onExport", "onAssertions", "onVariables", "onBrowserNetwork", "onFlowProgress", "onFlowComplete", "onDatabaseComplete", "onBrokerPublishComplete", "onDocumentReadComplete", "onDocumentWriteComplete"}
-	manifest.Permissions = []string{"workspace.read", "environments.read", "tabs.read", "assertions.provide", "variables.provide", "browserDebug.read", "flows.execute", "databases.execute", "brokers.publish", "documents.readContents", "documents.write"}
+	manifest.ActivationEvents = []string{"onStartup", "onCommand:test.events.seen", "onWorkspaceOpen", "onWorkspaceClose", "onEnvChange", "onThemeChange", "onTabOpen", "onTabClose", "onSave", "onImport", "onExport", "onAssertions", "onVariables", "onBrowserNetwork", "onFlowProgress", "onFlowComplete", "onDatabaseComplete", "onBrokerPublishComplete", "onDocumentReadComplete", "onDocumentWriteComplete", "onAIComplete"}
+	manifest.Permissions = []string{"workspace.read", "environments.read", "tabs.read", "assertions.provide", "variables.provide", "browserDebug.read", "flows.execute", "databases.execute", "brokers.publish", "documents.readContents", "documents.write", "ai.execute"}
 	manifest.Contributes.Commands = []CommandContribution{{ID: "test.events.seen", Title: "Seen events"}}
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(filepath.Join(root, ManifestFileName), manifestData, 0644); err != nil {
@@ -449,6 +471,7 @@ export function activate(api) {
   api.events.onBrokerPublishComplete(record('onBrokerPublishComplete'))
   api.events.onDocumentReadComplete(record('onDocumentReadComplete'))
   api.events.onDocumentWriteComplete(record('onDocumentWriteComplete'))
+  api.events.onAIComplete(record('onAIComplete'))
   api.variables.registerProvider('test.events.dynamic', (context) => ({ providedHost: context.host }))
   api.assertions.registerProvider('test.events.status', (payload) => ({ label: 'Status below 400', passed: payload.response.status < 400, actual: String(payload.response.status), expected: '< 400' }))
   api.commands.registerCommand('test.events.seen', () => ({ events: seen }))
@@ -589,6 +612,19 @@ export function activate(api) {
 		if entry, ok := events[len(events)-1].(map[string]any); !ok || entry["event"] != documentJob.event {
 			t.Fatalf("document completion events=%#v", events)
 		}
+	}
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "systemPrompt": "", "userPrompt": "Summarize", "options": map[string]any{}})
+	aiStarted, err := service.handleHostCall(context.Background(), "ai.startComplete", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aiJobID := aiStarted.(map[string]any)["jobId"].(string)
+	if reportErr := service.ReportAIJobEvent(installed.Manifest.ID, aiJobID, `{"success":true,"result":"summary"}`); reportErr != nil {
+		t.Fatal(reportErr)
+	}
+	events = waitForExtensionEvents(t, service, installed.Manifest.ID, 22)
+	if entry, ok := events[len(events)-1].(map[string]any); !ok || entry["event"] != "onAIComplete" {
+		t.Fatalf("AI completion events=%#v", events)
 	}
 	variableResults, err := service.EvaluateVariableProviders(`{"host":"provided.test"}`)
 	if err != nil || len(variableResults) != 1 || variableResults[0].Values["providedHost"] != "provided.test" || variableResults[0].ExtensionID != installed.Manifest.ID {

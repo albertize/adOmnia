@@ -127,6 +127,10 @@ func (e *ExtensionService) ReportDocumentJobEvent(extensionID, jobID, event, pay
 	return e.service.ReportDocumentJobEvent(extensionID, jobID, event, payloadJSON)
 }
 
+func (e *ExtensionService) ReportAIJobEvent(extensionID, jobID, payloadJSON string) error {
+	return e.service.ReportAIJobEvent(extensionID, jobID, payloadJSON)
+}
+
 func (e *ExtensionService) EvaluateAssertions(payloadJSON string) ([]extensionRuntime.AssertionProviderResult, error) {
 	return e.service.EvaluateAssertions(payloadJSON)
 }

@@ -1,0 +1,19 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.ai-action-example",
+  "name": "AI Action Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Runs an explicitly confirmed completion through the user's configured AI provider.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onCommand:adomnia.ai-action-example.summarize", "onAIComplete", "onView:adomnia.ai-action-example.result"],
+  "permissions": ["ai.execute"],
+  "contributes": {
+    "commands": [{ "id": "adomnia.ai-action-example.summarize", "title": "Summarize with configured AI", "category": "AI" }],
+    "views": [{ "id": "adomnia.ai-action-example.result", "container": "flow-analysis", "name": "AI Result", "renderer": "declarative" }]
+  }
+}

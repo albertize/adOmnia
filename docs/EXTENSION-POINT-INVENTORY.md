@@ -45,7 +45,7 @@ The manifest permission catalog reserves these names, but the SDK must describe 
 - database schema mutation/configuration beyond confirmed query jobs over saved connections;
 - broker consuming/subscriptions and administrative operations beyond confirmed one-message publishing;
 - arbitrary document formats, raw PDF bytes, Markdown/filesystem integration, and unattended writes beyond bounded PDF text and native-dialog export;
-- authentication providers and explicit AI actions;
+- authentication providers and unattended/implicit AI actions;
 - code-generation targets and richer import/export providers;
 - process spawning and private-network host APIs.
 

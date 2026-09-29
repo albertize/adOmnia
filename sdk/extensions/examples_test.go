@@ -13,7 +13,7 @@ import (
 	extensionsdk "adomnia/sdk/extensions"
 )
 
-var bundledExamples = []string{"response-security", "variable-inspector", "form-actions", "assertion-provider", "variable-provider", "browser-network", "mock-monitor", "proxy-monitor", "flow-catalog", "data-source-catalog", "document-catalog", "flow-runner", "database-runner", "broker-publisher", "document-worker"}
+var bundledExamples = []string{"response-security", "variable-inspector", "form-actions", "assertion-provider", "variable-provider", "browser-network", "mock-monitor", "proxy-monitor", "flow-catalog", "data-source-catalog", "document-catalog", "flow-runner", "database-runner", "broker-publisher", "document-worker", "ai-action"}
 
 func TestBundledExtensionExamplesValidate(t *testing.T) {
 	destination := exportSDK(t)

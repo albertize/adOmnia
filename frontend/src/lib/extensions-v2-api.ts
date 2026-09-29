@@ -46,6 +46,7 @@ export const getExtensionWebviewHTML = (extensionId: string, viewId: string): Pr
 export const setExtensionWorkspaceContext = (workspaceId: string): Promise<void> => ExtensionBindings.SetWorkspaceContext(workspaceId)
 export const setExtensionDomainContext = (context: Record<string, unknown>): Promise<void> => ExtensionBindings.SetDomainContext(JSON.stringify(context))
 export const notifyExtensionWorkbenchEvent = (event: 'onSave' | 'onImport' | 'onExport', payload: Record<string, unknown>): Promise<void> => ExtensionBindings.NotifyWorkbenchEvent(event, JSON.stringify(payload))
+export const reportExtensionAIJob = (extensionId: string, jobId: string, payload: Record<string, unknown>): Promise<void> => ExtensionBindings.ReportAIJobEvent(extensionId, jobId, JSON.stringify(payload))
 export const reportExtensionDocumentJob = (extensionId: string, jobId: string, event: 'onDocumentReadComplete' | 'onDocumentWriteComplete', payload: Record<string, unknown>): Promise<void> => ExtensionBindings.ReportDocumentJobEvent(extensionId, jobId, event, JSON.stringify(payload))
 export const reportExtensionBrokerJob = (extensionId: string, jobId: string, payload: Record<string, unknown>): Promise<void> => ExtensionBindings.ReportBrokerJobEvent(extensionId, jobId, JSON.stringify(payload))
 export const reportExtensionDatabaseJob = (extensionId: string, jobId: string, payload: Record<string, unknown>): Promise<void> => ExtensionBindings.ReportDatabaseJobEvent(extensionId, jobId, JSON.stringify(payload))

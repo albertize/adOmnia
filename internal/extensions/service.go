@@ -100,6 +100,7 @@ type Service struct {
 	databaseJobs   map[string]string
 	brokerJobs     map[string]string
 	documentJobs   map[string]extensionDocumentJob
+	aiJobs         map[string]string
 }
 
 type extensionDocumentJob struct {
@@ -108,7 +109,7 @@ type extensionDocumentJob struct {
 }
 
 func NewService(dataDir string) *Service {
-	return &Service{registry: NewRegistry(dataDir), workspaceID: "default", viewStates: map[string]json.RawMessage{}, activeRequest: map[string]any{}, activeResponse: map[string]any{}, domainContext: map[string]any{}, logs: map[string][]ExtensionLog{}, diagnostics: map[string][]ExtensionDiagnostic{}, rateWindows: map[string][]time.Time{}, flowJobs: map[string]string{}, databaseJobs: map[string]string{}, brokerJobs: map[string]string{}, documentJobs: map[string]extensionDocumentJob{}}
+	return &Service{registry: NewRegistry(dataDir), workspaceID: "default", viewStates: map[string]json.RawMessage{}, activeRequest: map[string]any{}, activeResponse: map[string]any{}, domainContext: map[string]any{}, logs: map[string][]ExtensionLog{}, diagnostics: map[string][]ExtensionDiagnostic{}, rateWindows: map[string][]time.Time{}, flowJobs: map[string]string{}, databaseJobs: map[string]string{}, brokerJobs: map[string]string{}, documentJobs: map[string]extensionDocumentJob{}, aiJobs: map[string]string{}}
 }
 
 func (s *Service) Init() error {
@@ -828,6 +829,40 @@ func (s *Service) ReportDocumentJobEvent(extensionID, jobID, event, payloadJSON 
 	return nil
 }
 
+func (s *Service) ReportAIJobEvent(extensionID, jobID, payloadJSON string) error {
+	if len(payloadJSON) > 1024*1024 {
+		return fmt.Errorf("AI job result exceeds 1 MiB")
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return fmt.Errorf("decode AI job result: %w", err)
+	}
+	s.mu.Lock()
+	owner := s.aiJobs[jobID]
+	if owner == extensionID {
+		delete(s.aiJobs, jobID)
+	}
+	host := s.host
+	s.mu.Unlock()
+	if owner == "" || owner != extensionID {
+		return fmt.Errorf("unknown extension AI job")
+	}
+	if host == nil {
+		return fmt.Errorf("extension host is unavailable")
+	}
+	payload["jobId"] = jobID
+	ctx, cancel := context.WithTimeout(context.Background(), defaultHostCallTimeout)
+	defer cancel()
+	var result HostExecutionResult
+	if err := host.Request(ctx, "dispatchEvent", DispatchEventRequest{ExtensionID: extensionID, Event: "onAIComplete", Payload: payload}, &result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return fmt.Errorf("AI job event failed: %s", result.Error)
+	}
+	return nil
+}
+
 func (s *Service) NotifyWorkbenchEvent(event, payloadJSON string) error {
 	if event != "onSave" && event != "onImport" && event != "onExport" {
 		return fmt.Errorf("unsupported workbench extension event: %s", event)
@@ -1045,6 +1080,13 @@ func (s *Service) clearDynamicContributions(id string) {
 			delete(s.documentJobs, jobID)
 		}
 	}
+	cancelledAIJobs := make([]string, 0)
+	for jobID, owner := range s.aiJobs {
+		if owner == id {
+			cancelledAIJobs = append(cancelledAIJobs, jobID)
+			delete(s.aiJobs, jobID)
+		}
+	}
 	notifier := s.actionNotifier
 	delete(s.diagnostics, id)
 	prefix := id + "\x00"
@@ -1071,6 +1113,9 @@ func (s *Service) clearDynamicContributions(id string) {
 		}
 		for _, jobID := range cancelledDocumentJobs {
 			notifier(ExtensionDomainAction{ExtensionID: id, Domain: "documents", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+		}
+		for _, jobID := range cancelledAIJobs {
+			notifier(ExtensionDomainAction{ExtensionID: id, Domain: "ai", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
 		}
 	}
 }
@@ -1260,6 +1305,50 @@ func (s *Service) handleHostCall(_ context.Context, method string, raw json.RawM
 			return map[string]bool{"ok": true}, nil
 		}
 		return map[string]bool{"ok": true}, mockRuntime.ExtensionStop()
+	case "ai.startComplete", "ai.cancel":
+		if err := requireGrant(instance, "ai.execute"); err != nil {
+			return nil, err
+		}
+		if err := s.checkRateLimit(extensionID+":ai-job", 20, time.Minute); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		notifier := s.actionNotifier
+		s.mu.Unlock()
+		if notifier == nil {
+			return nil, fmt.Errorf("AI workbench is unavailable")
+		}
+		if method == "ai.cancel" {
+			jobID, _ := params["jobId"].(string)
+			s.mu.Lock()
+			owner := s.aiJobs[jobID]
+			s.mu.Unlock()
+			if owner != extensionID {
+				return nil, fmt.Errorf("unknown extension AI job")
+			}
+			notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "ai", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
+			return map[string]bool{"accepted": true}, nil
+		}
+		systemPrompt, _ := params["systemPrompt"].(string)
+		userPrompt, _ := params["userPrompt"].(string)
+		if len(systemPrompt) > 64*1024 || strings.TrimSpace(userPrompt) == "" || len(userPrompt) > 256*1024 {
+			return nil, fmt.Errorf("invalid AI completion prompt")
+		}
+		maxTokens := 1000
+		if options, ok := params["options"].(map[string]any); ok {
+			if value, ok := options["maxTokens"].(float64); ok && value >= 1 && value <= 4000 {
+				maxTokens = int(value)
+			}
+		}
+		jobID, err := newFlowJobID()
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.aiJobs[jobID] = extensionID
+		s.mu.Unlock()
+		notifier(ExtensionDomainAction{ExtensionID: extensionID, Domain: "ai", Action: "complete", Payload: map[string]any{"jobId": jobID, "systemPrompt": systemPrompt, "userPrompt": userPrompt, "maxTokens": maxTokens}})
+		return map[string]any{"jobId": jobID}, nil
 	case "documents.startReadText", "documents.startExport", "documents.cancel":
 		permission := "documents.readContents"
 		action := "readText"
