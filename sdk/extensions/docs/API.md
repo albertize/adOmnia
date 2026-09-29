@@ -12,7 +12,7 @@ Implemented namespaces:
 - `secrets`: extension-owned encrypted strings available only while the local Vault is unlocked;
 - `logging`: named, bounded host logs;
 - `window.notify`: permission-gated desktop toast;
-- `requests`: active request and canonical HTTP execution;
+- `requests`: active request plus synchronous compatibility execution and owner-targeted cancellable jobs through the canonical Go HTTP executor;
 - `responses`: active response snapshot;
 - `variables`: permission-gated active variable map, `{{name}}` resolution, and lazy in-memory providers merged below explicit active-environment values;
 - `assertions`: manifest-owned providers evaluated against the active response and merged into the native Assertions result surface;

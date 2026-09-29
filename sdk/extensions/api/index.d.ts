@@ -36,6 +36,7 @@ export type EventHandler<T extends Record<string, unknown> = Record<string, unkn
 export interface EventsAPI {
   on<T extends Record<string, unknown> = Record<string, unknown>>(event: string, handler: EventHandler<T>): Disposable
   onRequest(handler: EventHandler): Disposable
+  onRequestComplete(handler: EventHandler): Disposable
   onSend(handler: EventHandler): Disposable
   onResponse(handler: EventHandler): Disposable
   onSave(handler: EventHandler): Disposable
@@ -81,6 +82,8 @@ export interface DeclarativeViewState {
 export interface RequestsAPI {
   getActive<T extends Record<string, unknown> = Record<string, unknown>>(): Promise<T>
   execute<TResponse extends Record<string, unknown> = Record<string, unknown>>(request: Record<string, unknown>): Promise<TResponse>
+  executeJob(request: Record<string, unknown>): Promise<{ jobId: string }>
+  cancel(jobId: string): Promise<void>
 }
 
 export interface VariablesAPI {

@@ -10,7 +10,7 @@ Permissions declare intent and the Go desktop broker enforces grants again for e
 | `workspaceState`, `globalState` | Read/write extension-owned scoped JSON state. |
 | `secrets.own` | Read/write encrypted strings in the extension-owned namespace while the local Vault is unlocked. |
 | `requests.read`, `responses.read` | Read the active canonical HTTP context and receive corresponding events. |
-| `requests.execute` | Execute through the canonical Go HTTP engine. |
+| `requests.execute` | Run/cancel canonical HTTP jobs and receive owner-targeted bounded completion events. |
 | `environments.read`, `collections.read`, `tabs.read`, `workspace.read` | Read broker snapshots synchronized by the workbench. Environment variable values are redacted without `variables.read`. |
 | `variables.read` | Read enabled active-environment variables and resolve `{{name}}` placeholders. |
 | `variables.provide` | Add bounded, in-memory string values to normal request variable resolution. |

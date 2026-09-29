@@ -6,7 +6,7 @@ An activation event says when extension code may be loaded. It is not an event s
 
 - `onStartup`
 - `onWorkspaceOpen`, `onWorkspaceClose`
-- `onRequest`, `onResponse`, `onSend`
+- `onRequest`, `onResponse`, `onSend`, `onRequestComplete`
 - `onSave`, `onImport`, `onExport`
 - `onThemeChange`, `onEnvChange`
 - `onTabOpen`, `onTabClose`
@@ -36,6 +36,7 @@ Command and view activation references are checked against static contributions.
 | `onImport`, `onExport` | Collection import/export and global drop pipelines | Notification event with bounded operation metadata. |
 | `onSend`, `onRequest` | Canonical Go HTTP send path | Sequential, deterministic transform; failures are fail-closed. Requires `requests.read`. |
 | `onResponse` | Canonical Go HTTP response path | Sequential transform; failures are fail-closed. Requires `responses.read`. |
+| `onRequestComplete` | Canonical cancellable Go HTTP executor | Owner-targeted bounded response/failure notification; requires `requests.execute`. |
 | `onAssertions` | Response Assertions tab | Lazily activates providers registered through `api.assertions`; requires `assertions.provide`. |
 | `onVariables` | Workbench environment/workspace context synchronization | Lazily activates providers registered through `api.variables`; requires `variables.provide`. |
 | `onBrowserNetwork` | Browser Debug capture store | Notification for each newly captured bounded network entry; requires `browserDebug.read`. |

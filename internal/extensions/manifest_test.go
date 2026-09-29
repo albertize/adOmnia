@@ -258,6 +258,18 @@ func TestValidateManifestAICompletionRequiresExecutePermission(t *testing.T) {
 	}
 }
 
+func TestValidateManifestRequestCompletionRequiresExecutePermission(t *testing.T) {
+	manifest := validTestManifest()
+	manifest.ActivationEvents = append(manifest.ActivationEvents, "onRequestComplete")
+	if diagnostics := ValidateManifest(manifest); !hasDiagnostic(diagnostics, "activation.permission") {
+		t.Fatalf("missing request execute permission diagnostic: %#v", diagnostics)
+	}
+	manifest.Permissions = append(manifest.Permissions, "requests.execute")
+	if diagnostics := ValidateManifest(manifest); hasErrors(diagnostics) {
+		t.Fatalf("valid request completion diagnostics: %#v", diagnostics)
+	}
+}
+
 func validTestManifest() Manifest {
 	return Manifest{
 		ManifestVersion:  SupportedManifestVersion,

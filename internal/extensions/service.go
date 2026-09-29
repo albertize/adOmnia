@@ -101,6 +101,12 @@ type Service struct {
 	brokerJobs     map[string]string
 	documentJobs   map[string]extensionDocumentJob
 	aiJobs         map[string]string
+	requestJobs    map[string]extensionRequestJob
+}
+
+type extensionRequestJob struct {
+	ExtensionID string
+	RequestID   string
 }
 
 type extensionDocumentJob struct {
@@ -109,7 +115,7 @@ type extensionDocumentJob struct {
 }
 
 func NewService(dataDir string) *Service {
-	return &Service{registry: NewRegistry(dataDir), workspaceID: "default", viewStates: map[string]json.RawMessage{}, activeRequest: map[string]any{}, activeResponse: map[string]any{}, domainContext: map[string]any{}, logs: map[string][]ExtensionLog{}, diagnostics: map[string][]ExtensionDiagnostic{}, rateWindows: map[string][]time.Time{}, flowJobs: map[string]string{}, databaseJobs: map[string]string{}, brokerJobs: map[string]string{}, documentJobs: map[string]extensionDocumentJob{}, aiJobs: map[string]string{}}
+	return &Service{registry: NewRegistry(dataDir), workspaceID: "default", viewStates: map[string]json.RawMessage{}, activeRequest: map[string]any{}, activeResponse: map[string]any{}, domainContext: map[string]any{}, logs: map[string][]ExtensionLog{}, diagnostics: map[string][]ExtensionDiagnostic{}, rateWindows: map[string][]time.Time{}, flowJobs: map[string]string{}, databaseJobs: map[string]string{}, brokerJobs: map[string]string{}, documentJobs: map[string]extensionDocumentJob{}, aiJobs: map[string]string{}, requestJobs: map[string]extensionRequestJob{}}
 }
 
 func (s *Service) Init() error {
@@ -829,6 +835,40 @@ func (s *Service) ReportDocumentJobEvent(extensionID, jobID, event, payloadJSON 
 	return nil
 }
 
+func (s *Service) reportRequestJobEvent(extensionID, jobID string, payload map[string]any) error {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if len(encoded) > 5*1024*1024 {
+		payload = map[string]any{"success": false, "error": "HTTP response exceeded the 5 MiB extension result limit"}
+	}
+	s.mu.Lock()
+	job, ok := s.requestJobs[jobID]
+	if ok && job.ExtensionID == extensionID {
+		delete(s.requestJobs, jobID)
+	}
+	host := s.host
+	s.mu.Unlock()
+	if !ok || job.ExtensionID != extensionID {
+		return fmt.Errorf("unknown extension request job")
+	}
+	if host == nil {
+		return fmt.Errorf("extension host is unavailable")
+	}
+	payload["jobId"] = jobID
+	ctx, cancel := context.WithTimeout(context.Background(), defaultHostCallTimeout)
+	defer cancel()
+	var result HostExecutionResult
+	if err := host.Request(ctx, "dispatchEvent", DispatchEventRequest{ExtensionID: extensionID, Event: "onRequestComplete", Payload: payload}, &result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return fmt.Errorf("request job event failed: %s", result.Error)
+	}
+	return nil
+}
+
 func (s *Service) ReportAIJobEvent(extensionID, jobID, payloadJSON string) error {
 	if len(payloadJSON) > 1024*1024 {
 		return fmt.Errorf("AI job result exceeds 1 MiB")
@@ -1087,6 +1127,13 @@ func (s *Service) clearDynamicContributions(id string) {
 			delete(s.aiJobs, jobID)
 		}
 	}
+	cancelledRequestIDs := make([]string, 0)
+	for jobID, job := range s.requestJobs {
+		if job.ExtensionID == id {
+			cancelledRequestIDs = append(cancelledRequestIDs, job.RequestID)
+			delete(s.requestJobs, jobID)
+		}
+	}
 	notifier := s.actionNotifier
 	delete(s.diagnostics, id)
 	prefix := id + "\x00"
@@ -1101,6 +1148,9 @@ func (s *Service) clearDynamicContributions(id string) {
 		}
 	}
 	s.mu.Unlock()
+	for _, requestID := range cancelledRequestIDs {
+		httpexec.Cancel(requestID)
+	}
 	if notifier != nil {
 		for _, jobID := range cancelledJobs {
 			notifier(ExtensionDomainAction{ExtensionID: id, Domain: "flows", Action: "cancel", Payload: map[string]any{"jobId": jobID}})
@@ -1731,6 +1781,52 @@ func (s *Service) handleHostCall(_ context.Context, method string, raw json.RawM
 			}
 		}
 		return value, nil
+	case "requests.start", "requests.cancel":
+		if err := requireGrant(instance, "requests.execute"); err != nil {
+			return nil, err
+		}
+		if method == "requests.cancel" {
+			jobID, _ := params["jobId"].(string)
+			s.mu.Lock()
+			job, ok := s.requestJobs[jobID]
+			s.mu.Unlock()
+			if !ok || job.ExtensionID != extensionID {
+				return nil, fmt.Errorf("unknown extension request job")
+			}
+			httpexec.Cancel(job.RequestID)
+			return map[string]bool{"accepted": true}, nil
+		}
+		if err := s.checkRateLimit(extensionID+":request-job", 120, time.Minute); err != nil {
+			return nil, err
+		}
+		request, ok := params["request"].(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("requests.start requires a request object")
+		}
+		requestJSON, err := json.Marshal(request)
+		if err != nil || len(requestJSON) > maxStateValueBytes {
+			return nil, fmt.Errorf("invalid or oversized extension request")
+		}
+		jobID, err := newFlowJobID()
+		if err != nil {
+			return nil, err
+		}
+		requestID := "extension:" + jobID
+		request["id"] = requestID
+		requestJSON, _ = json.Marshal(request)
+		s.mu.Lock()
+		s.requestJobs[jobID] = extensionRequestJob{ExtensionID: extensionID, RequestID: requestID}
+		s.mu.Unlock()
+		go func() {
+			responseJSON := httpexec.Execute(string(requestJSON))
+			var response any
+			if unmarshalErr := json.Unmarshal([]byte(responseJSON), &response); unmarshalErr != nil {
+				_ = s.reportRequestJobEvent(extensionID, jobID, map[string]any{"success": false, "error": unmarshalErr.Error()})
+				return
+			}
+			_ = s.reportRequestJobEvent(extensionID, jobID, map[string]any{"success": true, "result": response})
+		}()
+		return map[string]any{"jobId": jobID}, nil
 	case "requests.execute":
 		if err := requireGrant(instance, "requests.execute"); err != nil {
 			return nil, err

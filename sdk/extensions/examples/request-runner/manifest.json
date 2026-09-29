@@ -1,0 +1,19 @@
+{
+  "$schema": "../../schemas/manifest-v2.schema.json",
+  "manifestVersion": 2,
+  "id": "adomnia.request-runner-example",
+  "name": "Request Runner Example",
+  "version": "1.0.0",
+  "publisher": "adomnia",
+  "description": "Executes a cancellable HTTP request through adOmnia's canonical backend.",
+  "license": "MIT",
+  "engines": { "adomnia": ">=0.9.0 <2" },
+  "apiVersion": "2.0",
+  "main": "extension.js",
+  "activationEvents": ["onCommand:adomnia.request-runner-example.run", "onRequestComplete", "onView:adomnia.request-runner-example.result"],
+  "permissions": ["requests.execute"],
+  "contributes": {
+    "commands": [{ "id": "adomnia.request-runner-example.run", "title": "Run HTTP request job", "category": "Requests" }],
+    "views": [{ "id": "adomnia.request-runner-example.result", "container": "flow-analysis", "name": "Request Job Result", "renderer": "declarative" }]
+  }
+}

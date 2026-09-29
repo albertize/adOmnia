@@ -144,7 +144,7 @@ var knownMenuLocations = map[string]struct{}{
 }
 
 var knownActivationEvents = map[string]struct{}{
-	"onStartup": {}, "onWorkspaceOpen": {}, "onWorkspaceClose": {}, "onRequest": {}, "onResponse": {},
+	"onStartup": {}, "onWorkspaceOpen": {}, "onWorkspaceClose": {}, "onRequest": {}, "onResponse": {}, "onRequestComplete": {},
 	"onSend": {}, "onSave": {}, "onImport": {}, "onExport": {}, "onThemeChange": {}, "onEnvChange": {},
 	"onTabOpen": {}, "onTabClose": {}, "onAssertions": {}, "onVariables": {}, "onBrowserNetwork": {}, "onMockHit": {}, "onProxyTraffic": {}, "onFlowProgress": {}, "onFlowComplete": {}, "onDatabaseComplete": {}, "onBrokerPublishComplete": {}, "onDocumentReadComplete": {}, "onDocumentWriteComplete": {}, "onAIComplete": {},
 }

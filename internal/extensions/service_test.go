@@ -3,6 +3,8 @@ package extensions
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -139,7 +141,7 @@ func TestServiceBrokersGrantedDomainActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest.Permissions = append(manifest.Permissions, "tabs.write", "browserDebug.control", "mock.read", "mock.control", "proxy.read", "proxy.control", "flows.read", "flows.execute", "databases.read", "databases.execute", "brokers.read", "brokers.publish", "documents.read", "documents.readContents", "documents.write", "ai.execute")
+	manifest.Permissions = append(manifest.Permissions, "tabs.write", "requests.execute", "browserDebug.control", "mock.read", "mock.control", "proxy.read", "proxy.control", "flows.read", "flows.execute", "databases.read", "databases.execute", "brokers.read", "brokers.publish", "documents.read", "documents.readContents", "documents.write", "ai.execute")
 	data, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(filepath.Join(root, ManifestFileName), data, 0644); err != nil {
 		t.Fatal(err)
@@ -207,6 +209,27 @@ func TestServiceBrokersGrantedDomainActions(t *testing.T) {
 	documents, err := service.handleHostCall(context.Background(), "documents.listPdfProjects", params)
 	if err != nil || len(documents.([]map[string]any)) != 1 || documents.([]map[string]any)[0]["annotations"] != nil {
 		t.Fatalf("documents=%#v err=%v", documents, err)
+	}
+	requestStarted := make(chan struct{}, 1)
+	requestServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestStarted <- struct{}{}
+		<-r.Context().Done()
+	}))
+	defer requestServer.Close()
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "request": map[string]any{"method": "GET", "url": requestServer.URL, "headers": map[string]string{}, "timeoutMs": 30000}})
+	requestJob, err := service.handleHostCall(context.Background(), "requests.start", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-requestStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("extension request did not start")
+	}
+	requestJobID := requestJob.(map[string]any)["jobId"].(string)
+	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "jobId": requestJobID})
+	if _, err := service.handleHostCall(context.Background(), "requests.cancel", params); err != nil {
+		t.Fatal(err)
 	}
 	params, _ = json.Marshal(map[string]any{"extensionId": installed.Manifest.ID, "systemPrompt": "Be concise", "userPrompt": "Summarize this request", "options": map[string]any{"maxTokens": 200}})
 	aiStarted, err := service.handleHostCall(context.Background(), "ai.startComplete", params)

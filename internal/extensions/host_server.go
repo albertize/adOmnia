@@ -611,7 +611,7 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 	_ = events.Set("on", func(call goja.FunctionCall) goja.Value {
 		return registerEvent(call.Argument(0).String(), call.Argument(1))
 	})
-	for method, event := range map[string]string{"onRequest": "onRequest", "onResponse": "onResponse", "onSend": "onSend", "onSave": "onSave", "onImport": "onImport", "onExport": "onExport", "onThemeChange": "onThemeChange", "onEnvironmentChange": "onEnvChange", "onTabOpen": "onTabOpen", "onTabClose": "onTabClose", "onWorkspaceOpen": "onWorkspaceOpen", "onWorkspaceClose": "onWorkspaceClose", "onBrowserNetwork": "onBrowserNetwork", "onMockHit": "onMockHit", "onProxyTraffic": "onProxyTraffic", "onFlowProgress": "onFlowProgress", "onFlowComplete": "onFlowComplete", "onDatabaseComplete": "onDatabaseComplete", "onBrokerPublishComplete": "onBrokerPublishComplete", "onDocumentReadComplete": "onDocumentReadComplete", "onDocumentWriteComplete": "onDocumentWriteComplete", "onAIComplete": "onAIComplete"} {
+	for method, event := range map[string]string{"onRequest": "onRequest", "onResponse": "onResponse", "onRequestComplete": "onRequestComplete", "onSend": "onSend", "onSave": "onSave", "onImport": "onImport", "onExport": "onExport", "onThemeChange": "onThemeChange", "onEnvironmentChange": "onEnvChange", "onTabOpen": "onTabOpen", "onTabClose": "onTabClose", "onWorkspaceOpen": "onWorkspaceOpen", "onWorkspaceClose": "onWorkspaceClose", "onBrowserNetwork": "onBrowserNetwork", "onMockHit": "onMockHit", "onProxyTraffic": "onProxyTraffic", "onFlowProgress": "onFlowProgress", "onFlowComplete": "onFlowComplete", "onDatabaseComplete": "onDatabaseComplete", "onBrokerPublishComplete": "onBrokerPublishComplete", "onDocumentReadComplete": "onDocumentReadComplete", "onDocumentWriteComplete": "onDocumentWriteComplete", "onAIComplete": "onAIComplete"} {
 		eventName := event
 		_ = events.Set(method, func(call goja.FunctionCall) goja.Value { return registerEvent(eventName, call.Argument(0)) })
 	}
@@ -627,6 +627,28 @@ func (s *hostServer) buildAPI(runtime *extensionRuntime) (*goja.Object, error) {
 			panic(vm.NewGoError(err))
 		}
 		return vm.ToValue(result)
+	})
+	_ = requests.Set("executeJob", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "requests.execute") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: requests.execute")))
+		}
+		if !manifestHasActivation(runtime.manifest, "onRequestComplete") {
+			panic(vm.NewGoError(fmt.Errorf("asynchronous request execution requires onRequestComplete activation")))
+		}
+		result, err := s.hostCall("requests.start", map[string]any{"extensionId": runtime.manifest.ID, "request": call.Argument(0).Export()})
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(result)
+	})
+	_ = requests.Set("cancel", func(call goja.FunctionCall) goja.Value {
+		if !hasPermission(runtime.manifest.Permissions, "requests.execute") {
+			panic(vm.NewGoError(fmt.Errorf("permission denied: requests.execute")))
+		}
+		if _, err := s.hostCall("requests.cancel", map[string]any{"extensionId": runtime.manifest.ID, "jobId": call.Argument(0).String()}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
 	})
 	_ = requests.Set("execute", func(call goja.FunctionCall) goja.Value {
 		if !hasPermission(runtime.manifest.Permissions, "requests.execute") {
@@ -1379,6 +1401,8 @@ func eventPermission(event string) string {
 	switch event {
 	case "onRequest", "onSend":
 		return "requests.read"
+	case "onRequestComplete":
+		return "requests.execute"
 	case "onResponse":
 		return "responses.read"
 	case "onEnvChange":
