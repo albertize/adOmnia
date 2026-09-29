@@ -744,7 +744,7 @@ The work is intentionally vertical and gated. Do not build every API namespace b
 
 Implement and stabilize namespaces in small vertical slices:
 
-1. [ ] requests, responses, variables, assertions;
+1. [x] requests, responses, variables, assertions;
 2. [ ] collections, environments, import/export, code generation;
 3. [ ] mock, proxy, browser debugging;
 4. [x] flows and load/stress execution;
