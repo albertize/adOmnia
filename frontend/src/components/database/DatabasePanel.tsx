@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DATABASE_PENDING_CONNECTION_KEY } from '@/lib/moduleHandoff'
 import { Braces, CheckCircle2, Database, LayoutList, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useServerPort, serverUrl, sidecarFetch } from '@/lib/useServerPort'
@@ -18,6 +19,7 @@ import {
   createObjectQuery, defaultConnectionName, extractCount, extractNames, introspectionQuery,
   isDangerous, isDangerousMongo, nextQueryName, normalizeConnection, substituteVars, validateConnection,
   type DbConnection, type DbDriver, type DbResult, type HistoryItem, type QueryTab, type SchemaItem,
+  upsertConnectionFromRef,
 } from './dbShared'
 import {
   clearDatabaseConnectionSecrets,
@@ -26,6 +28,8 @@ import {
   resolveDatabaseConnection,
   serializeDatabaseConnections,
 } from './dbSecrets'
+import { useEntityHandoff } from '@/lib/entities/dispatch'
+import { showEntityNotice } from '@/lib/entities/notice'
 
 interface QueryWorkspaceState {
   tabs: QueryTab[]
@@ -101,20 +105,24 @@ export function DatabasePanel() {
           setError('Saved database connections could not be read; a clean local connection was created.')
         }
       }
-      const pendingRaw = sessionStorage.getItem('adomnia.database.pendingConnection')
-        ?? localStorage.getItem('adomnia.database.pendingConnection')
+      const pendingRaw = sessionStorage.getItem(DATABASE_PENDING_CONNECTION_KEY)
+        ?? localStorage.getItem(DATABASE_PENDING_CONNECTION_KEY)
       if (pendingRaw) {
         try {
           const pending = JSON.parse(pendingRaw) as Partial<DbConnection>
           const pendingConn = normalizeConnection({ ...pending, id: crypto.randomUUID() })
-          nextConnections = [pendingConn, ...nextConnections]
+          // Aprire due volte lo stesso contesto riusa la connessione già creata invece di duplicarla.
+          const existing = nextConnections.find((connection) => connection.name === pendingConn.name && connection.driver === pendingConn.driver)
+          nextConnections = existing
+            ? [existing, ...nextConnections.filter((connection) => connection.id !== existing.id)]
+            : [pendingConn, ...nextConnections]
           await safeStoragePut(STORAGE_BUCKET, CONNECTIONS_KEY, serializeDatabaseConnections(nextConnections))
-          setMessage(`Docker Lab connection "${pendingConn.name}" added`)
+          setMessage(existing ? `Connection "${existing.name}" selected` : `Connection "${pendingConn.name}" added`)
         } catch {
-          setError('Could not import Docker Lab database connection')
+          setError('Could not import the database connection')
         } finally {
-          sessionStorage.removeItem('adomnia.database.pendingConnection')
-          localStorage.removeItem('adomnia.database.pendingConnection')
+          sessionStorage.removeItem(DATABASE_PENDING_CONNECTION_KEY)
+          localStorage.removeItem(DATABASE_PENDING_CONNECTION_KEY)
         }
       }
       setConnections(nextConnections)
@@ -202,6 +210,27 @@ export function DatabasePanel() {
     void persistConnections([...connections, conn])
     setActiveId(conn.id)
   }
+
+  useEntityHandoff('database', (ref, intent) => {
+    if (!hydrated) return false // never persist before saved connections are loaded
+    if (intent === 'connect') {
+      const next = upsertConnectionFromRef(connections, ref)
+      if (next.created) void persistConnections(next.connections)
+      setActiveId(next.id)
+      showEntityNotice(next.created
+        ? `Connection "${ref.label}" added. Enter the password or load it from the Vault, then connect.`
+        : `Switched to the existing connection for ${ref.label}.`)
+      return true
+    }
+    if (intent === 'query') {
+      const tab = blankTab(ref.label, `SELECT * FROM ${ref.label} LIMIT 100`)
+      setTabs((current) => [...current, tab])
+      setActiveTabId(tab.id)
+      if (!active || active.driver === 'sqlite') showEntityNotice(`Pick the connection that owns table ${ref.label}, then run the query.`)
+      return true
+    }
+    return true
+  })
 
   const deleteConnection = (id: string) => {
     if (connections.length <= 1) return

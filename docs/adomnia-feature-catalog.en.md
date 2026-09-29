@@ -1,6 +1,6 @@
 # adOmnia — Feature Catalog
 
-**adOmnia** is a local-first desktop API Development Toolbox built with Go (Wails) + React 18 (TypeScript).  
+**adOmnia** is a local-first desktop API Development Toolbox built with Go (Wails 3) + React 19 (TypeScript), with an integrated Go IDE (Go Studio).  
 All features are offline-first: no account, no telemetry, and no data sent outside the machine.
 
 ---
@@ -28,6 +28,7 @@ All features are offline-first: no account, no telemetry, and no data sent outsi
 | G | [Platform](#g-platform) | Settings, Infrastructure, UI Framework | ~76 |
 | H | [API Design](#h-api-design) | OpenAPI Import/Export, Schema Components, Visual OpenAPI Editor | ~10 |
 | I | [MCP (Model Context Protocol)](#i-mcp-model-context-protocol) | MCP Client/Debugger, Sessions & Transport, Server Generator | ~12 |
+| J | [Go Studio (Go IDE)](#j-go-studio-go-ide) | Projects & Windows, Editor & gopls, Lint & AI, Run/Test/Debug, Toolchain, Git & Integration | ~34 |
 
 ---
 
@@ -904,6 +905,16 @@ Existing `{{variable}}` references are also linked when their current environmen
 | G3.9 | **Dark + Light Mode** | Theme toggle through CSS class on `<html>`. |
 | G3.10 | **Custom Scrollbar** | Thin scrollbar consistent with the developer-tool aesthetic. |
 
+### G4. Developer Context & Entity Router
+
+| # | Feature | Description |
+|---|-------------|-------------|
+| G4.1 | **Project Context** | Opening a folder in gO scans it locally: go.mod modules, `package main` services, docker compose services and datasources (Postgres/MySQL/Mongo/Redis/Kafka/RabbitMQ/NATS), `.env` variables, OpenAPI/proto/WSDL contracts, Go routes (net/http 1.22, gin, echo, chi, gorilla), `os.Getenv`/`env` tags, SQL tables and Kafka/AMQP/NATS topics in string literals. Every item shows its file:line; code-derived items are marked *inferred*. |
+| G4.2 | **Live updates** | Saving in gO rescans that file; returning to the window rescans files changed elsewhere. |
+| G4.3 | **Secrets stay local** | Secret-looking `.env` values are masked, URL passwords redacted, compose passwords never read. |
+| G4.4 | **Palette: Project & Symbols** | Ctrl+K finds routes, tables, topics, services, env vars, contracts and gopls symbols of the active gO project. Enter runs the default action, Tab lists all actions. |
+| G4.5 | **Entity actions** | Route → Send in API Client / Go to handler / Add to Mock; service → use as baseUrl (confirm); datasource → Database or Broker Studio (no password copied); contract → API Docs / gRPC / SOAP; table → query; topic → Broker Studio; any item → open source in gO. |
+
 ---
 
 ## H. API DESIGN
@@ -970,6 +981,76 @@ AI-integration module: connect to, debug, and generate MCP servers — exposing 
 
 ---
 
+## J. GO STUDIO (GO IDE)
+
+A Go IDE inside adOmnia. Projects open without running anything; local tools run only after the project is trusted. Full guide: [docs/GO-STUDIO.md](GO-STUDIO.md).
+
+### J1. Projects, Sessions & Windows
+
+| # | Feature | Description |
+|---|-------------|-------------|
+| J1.1 | **Open / Create Project** | Opens a module, a `go.work` workspace or a folder inside a repository; *New Go Project* runs `go mod init` after confirmation. |
+| J1.2 | **Project Trust** | An opened project only reads and saves files. *Trust Project Tools* allows gopls, linters, build, run, tests, debugging, terminal and installs; revoking trust stops the project's processes. |
+| J1.3 | **Isolated Sessions** | Several projects stay open together; output, diagnostics, run configurations, terminals, Git state and local history never mix. |
+| J1.4 | **Session Restore & Recovery** | Tabs, layout, bookmarks, navigation history and breakpoints are restored; unsaved buffers are recovered only on request. |
+| J1.5 | **Go Studio Workspaces** | Named groups of projects, separate from adOmnia API workspaces; the same project can live in several. |
+| J1.6 | **Separate Project Windows** | *Open Project in New Window* gives a project its own native window; only one window edits a project at a time. Covered by automated tests; manual check pending. |
+| J1.7 | **External Change Handling** | A file watcher reloads clean buffers and offers Reload / Keep / Compare for modified ones; the same file open in two projects is detected. |
+
+### J2. Editor & Code Intelligence (gopls)
+
+| # | Feature | Description |
+|---|-------------|-------------|
+| J2.1 | **Monaco Editor** | Tabs with pinning, reopen closed tab, split editor with its own tabs, atomic saves, GoLand keymap, multi-caret and column selection. |
+| J2.2 | **Completion & Diagnostics** | gopls completion with auto-imports and diagnostics computed on unsaved buffers. |
+| J2.3 | **Navigation** | Ctrl+click / Ctrl+B declaration, implementations, super method, usages, symbol search, Search Everywhere, back/forward history, bookmarks, structure view and symbolic breadcrumb. |
+| J2.4 | **Implementation Markers** | Gutter markers for implementations and implemented interfaces, including SDK interfaces. |
+| J2.5 | **Refactoring** | Rename with multi-file preview and gopls code actions (extract variable/constant/function, inline, move to new file), applied all-or-nothing. |
+| J2.6 | **Semantic Editing** | Semantic highlighting, inlay hints, quick documentation, parameter info, Implement Interface. |
+| J2.7 | **Formatting** | Reformat code and optimize imports, optionally on save; gofumpt optional. |
+| J2.8 | **File Icons** | Gopher for Go sources (test marker), Go logo for module files, Simple Icons brands for Docker, Git, GitHub Actions, `.env` and common formats; readable on both themes. |
+
+### J3. Lint & AI
+
+| # | Feature | Description |
+|---|-------------|-------------|
+| J3.1 | **Linters** | golangci-lint or staticcheck with the project's configuration, lint on save, quick fixes and line suppression. |
+| J3.2 | **Fix with AI** | Quick fix and Problems action that sends the file (and the local package of an `undefined: pkg.Name` error) to the configured AI provider; the answer can touch only those files and always opens in a preview. |
+| J3.3 | **Problems Window** | gopls, linter and build problems grouped by file with navigation. |
+
+### J4. Run, Test & Debug
+
+| # | Feature | Description |
+|---|-------------|-------------|
+| J4.1 | **Build / Run / Stop** | Structured `go build`/`go run` with stdin, clickable output, restart, and stop of the whole process tree. |
+| J4.2 | **Run Configurations** | Saved per project; secret environment values are prompted and never persisted. |
+| J4.3 | **Gutter Run Actions** | ▶ next to `func main`, tests, benchmarks, fuzz tests and examples with Run / Debug / Run with Coverage. |
+| J4.4 | **Test Runner** | Tree of results from `go test -json`, failure navigation, Rerun Failed. |
+| J4.5 | **Coverage** | Coverage in the editor, cleared when the source no longer matches. |
+| J4.6 | **Delve Debugger** | Breakpoints, stepping, stack, variables, watches and evaluate; launch, attach to a process or connect to a remote `dlv --headless`. Stop leaves no `dlv` or debuggee behind. |
+| J4.7 | **Terminal** | Real PTY (ConPTY on Windows) per project, closing its whole process tree. |
+| J4.8 | **Go Tools** | `go vet`, `go generate`, `go fix`, `go mod why`, `go mod graph`, `go doc` with an exact command preview. |
+
+### J5. Toolchain & Dependencies
+
+| # | Feature | Description |
+|---|-------------|-------------|
+| J5.1 | **Go SDK Management** | Detects Go or installs official releases (SHA-256 verified); a different SDK per project without changing `PATH`. |
+| J5.2 | **Tool Installation** | Confirmed installs of gopls, golangci-lint, staticcheck and Delve into the adOmnia tools folder; custom tool paths. |
+| J5.3 | **Dependencies** | Previewed `go get`, `go mod tidy`, update, download and verify. |
+
+### J6. Git & adOmnia Integration
+
+| # | Feature | Description |
+|---|-------------|-------------|
+| J6.1 | **VCS in the Editor** | Branch and changes in the toolbar, gutter diff with hunk revert, blame, file history, commit and branch switch. |
+| J6.2 | **Git Studio Follows the Project** | Opening a project points Git Studio at its repository root, even for a subfolder; a manual choice is kept until the project changes. |
+| J6.3 | **Project Services** | Opens Docker Lab, Database Studio and Broker Studio preconfigured for services detected in `go.mod`. |
+| J6.4 | **Open in API Client** | CodeLens on HTTP route handlers (net/http, gorilla/mux, gin, echo, fiber, chi) opens a prefilled request. |
+| J6.5 | **Plugin Events** | Read-only Go Studio events for plugins (contract v1). |
+
+---
+
 ## SUMMARY
 
 | Category | Sections | Features |
@@ -983,17 +1064,5 @@ AI-integration module: connect to, debug, and generate MCP servers — exposing 
 | **G — Platform** | Settings, Infrastructure, UI Framework | 76 |
 | **H — API Design** | OpenAPI Import/Export, Schema Components, Visual OpenAPI Editor | 10 |
 | **I — MCP (Model Context Protocol)** | Client/Debugger, Sessions & Transport, Server Generator | 12 |
-| **Total** | 38 sections | **~535** |
-
-
-### Offline easter egg: a0 Bug Hunt
-
-Developer Desk v0.9.20: local raster art, tuned ground/air control, C slide into a long jump, variable-height jumps and held stomp rebounds. Connected book stacks and enemy stepping stones reward a flowing upper route. Gremlin/Phantom are optional roaming encounters; only the enlarged Brute finale locks its arena. Distinct common enemy silhouettes, IT/EN controls, offline difficulty records and accessibility preferences.
-
-Three-stage canvas platformer inside an overlay: Localhost, API Gateway (moving platforms, timed firewalls, hopping Retry bugs), and Production (crumbling platforms, Legacy Monolith boss). Four developer power-ups in every stage: git revert (R rewinds three seconds), Breakpoint (freezes bugs, firewalls, moving platforms and the boss), sudo (temporary root immunity that deletes bugs on contact) and Garbage Collector (a shockwave that frees every bug in range). Three health points, checkpoints, three mandatory Hotfix pickups, 111 optional bits, pause/replay, IT/EN copy, synthesized offline sounds, reduced motion and local campaign records. Ask the a0 chatbot to play; spinning the Hub logo never opens the game. Campaign logic and rendering are covered by automated checks, while full desktop playthrough and difficulty tuning remain manual validation work.
-
-Bug Hunt v0.9.17 rebuilds every platform as a lit chassis with role glyphs and a clearer start menu, and fixes an arena slab that made the final boss unbeatable. v0.9.16 added a debug gun (F) that also shoots down SOAP envelopes, chaser and turret enemies that react to the player, and a Legacy Monolith that announces and executes one rule change per phase (reverse gravity, clones, platforms offline). v0.9.15 added a DELETE wave that deletes the floor of Production behind the player and a magnetic grapple (E) that swings a0 between glowing anchors and refills the dash on release. v0.9.14 added dash refills on direct hits, 17 enemies including optional aerial chains, a six-bit/eight-second Bonus Rush per stage, S/A/B/C score ranks and a final double-wave boss phase. Canvas framing keeps the whole level visible.
-
-Bug Hunt v0.9.18 (2026-09-22): Localhost is 4820 px long with 15 enemies, additional platforms/grapple anchors and 21 extra bits. a0 tracks nearby threats, reacts to landings and ledges, celebrates checkpoints and speaks contextual IT/EN quips. The campaign now has exactly three lives, shown as three hearts; no refills between stages, and zero lives opens Game Over. Records use `adomnia.bughunt.preferences.three-lives.v4`, retaining old records in their existing keys and migrating only audio/reduced-motion preferences. Desktop playthrough and difficulty tuning remain open.
-
-Bug Hunt Developer Desk tuning (2026-09-24): enemy trajectories and attack-name previews removed; actual impacts remain visible. Head landings can damage the attacking Brute and take priority over its impact damage. Two cable gaps (440 px and 220 px) replace intervening footholds, with anchors aligned to the crossing. First-stage rewind, sudo and freeze pickups are replaced by shields, ammunition and speed boosts; later stages retain their existing powers. Automated route and combat checks pass; desktop playthrough still required.
+| **J — Go Studio (Go IDE)** | Projects & Windows, Editor & gopls, Lint & AI, Run/Test/Debug, Toolchain, Git & Integration | 34 |
+| **Total** | 44 sections | **~569** |

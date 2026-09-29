@@ -2,6 +2,85 @@
 
 adOmnia releases are driven by Git tags and GitHub Actions.
 
+## Unreleased
+
+## v0.9.41 release notes: a concurrency-first debugger
+
+See [the full v0.9.41 notes](releases/v0.9.41.md): the Debug tool window is
+rebuilt around goroutines, with states, blocked-on expressions, a
+Concurrency view that flags deadlocks, blocked channels, mutex contention,
+leaks and data races, navigable race detector reports, inline values while
+paused and F6/F10/F5 debug keys.
+
+## v0.9.40 release notes: a maximised editor, compose, key encryption and a new look
+
+See [the full v0.9.40 notes](releases/v0.9.40.md): Maximize Editor and
+fully closable panes, docker compose from the gutter, Send to API
+Workspace, `.pem` keys opened and encrypted in Power Tools (standard
+PKCS#8, verified with OpenSSL), and recent projects in the toolbar. Menus
+and confirmation dialogs are redesigned, Jenkinsfiles and keys get their
+own icons, the a0 launcher stays out of the way, and gopls runs lighter.
+
+## v0.9.39 release notes: Go Studio runs Makefiles and Dockerfiles
+
+See [the full v0.9.39 notes](releases/v0.9.39.md): the gutter ▶ runs
+Makefile targets and builds or runs Dockerfiles with the real `make` and
+`docker`. Stop really stops the container, and secret build args never
+reach the command line. Every file type is now highlighted. Developer
+Context turns the project's routes, services, datasources, contracts,
+tables and topics into palette actions, and the Hub introduces the aO → gO
+ecosystem.
+
+## v0.9.38 release notes: Go Studio Fix with AI and real file icons
+
+See [the full v0.9.38 notes](releases/v0.9.38.md): errors and warnings can
+be fixed with the AI provider configured in adOmnia, always through a
+reviewed preview, and every file list shows real technology icons.
+
+## v0.9.37 release notes: Go Studio terminal, tests, debugger and GoLand parity
+
+See [the full v0.9.37 notes](releases/v0.9.37.md): Go Studio adds a real
+terminal, a structured test runner with coverage, the Delve debugger,
+gopls refactoring and navigation, Git in the editor linked to Git Studio,
+Project Services, separate project windows and a JetBrains-style chrome.
+
+## v0.9.36 release notes: Go Studio becomes a real Go IDE
+
+See [the full v0.9.36 notes](releases/v0.9.36.md): Go Studio now opens, edits,
+understands, lints, runs and tests real Go projects. It adds gopls completion,
+navigation, previewed rename and code actions; golangci-lint or staticcheck
+findings; gutter ▶ actions for `func main` and tests; split editor, pinned
+tabs and a symbolic breadcrumb; and a full GoLand-style menu bar. Debugger,
+terminal and test runner tree come in later phases.
+
+## v0.9.35 release notes: Go Studio foundation
+
+See [the full v0.9.35 notes](releases/v0.9.35.md): adOmnia gains the
+local-first Go Studio architecture, safe project sessions, a compact `gO`
+entry in the existing rail and the first integrated desktop shell. Execution,
+editing, gopls, terminal and debugger controls remain intentionally absent
+until their gated implementation phases are complete.
+
+## v0.9.34 release notes: a0 knows the product and builds mocks
+
+See [the full v0.9.34 notes](releases/v0.9.34.md): a0 gains a real product
+capability map, can generate local Mock Server endpoints and open panels from
+chat, and replies in the user's language with bounded conversation context.
+
+The release also lands the leaner startup and the extraction of a0: Bug Hunt
+into a separate local project. The fresh Hub's static JavaScript graph falls
+from 823,684 to 572,407 uncompressed bytes; closed editors, the command
+palette, import parsers and the unconfigured AI companion are deferred, with a
+CI startup budget to keep them out of the entry graph. Game source, tests and
+artwork are preserved outside adOmnia, and no workspace or settings migration
+is required.
+
+## v0.9.33 release notes: a0 can act on the workspace
+
+See [the full v0.9.33 notes](releases/v0.9.33.md): explicit Agent actions,
+validated root request creation, a deterministic greeting-API command and a
+live DeepSeek verification of the complete structured-action response.
+
 ## v0.9.32 release notes: smarter AI setup and native DeepSeek
 
 See [the full v0.9.32 notes](releases/v0.9.32.md): native DeepSeek support,

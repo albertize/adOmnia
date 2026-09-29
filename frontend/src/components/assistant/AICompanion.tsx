@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, FileText, Loader2, Maximize2, Minimize2, Send, WandSparkles, X } from 'lucide-react'
 import * as AIEngine from '@/wailsjs/go/main/AIEngine'
 import { ensureAIConfigured } from '@/lib/aiEngine'
-import { buildCompanionPrompt, COMPANION_WELCOME, isAICompanionAvailable, isBugHuntPlayIntent, parseCompanionReply, type CompanionMood, type HeaderSuggestion } from '@/lib/aiCompanion'
+import { buildCompanionPrompt, COMPANION_WELCOME, inferCompanionRequestAction, inferMockGenerationAction, isAICompanionAvailable, materializeCompanionRequest, parseCompanionReply, type CompanionMood, type GenerateMockAction, type HeaderSuggestion } from '@/lib/aiCompanion'
 import { blankKVRow } from '@/lib/types'
+import { appendMockEndpoints, generatedMockEndpointsToStored } from '@/lib/mockEndpointStore'
 import { useAppStore } from '@/stores/app'
 import { useCollectionsStore } from '@/stores/collections'
 import { useSettingsStore } from '@/stores/settings'
@@ -23,6 +24,11 @@ type ChatMessage = {
 
 const WELCOME: ChatMessage = { id: 'welcome', role: 'assistant', mood: 'happy', text: COMPANION_WELCOME }
 
+function prefersItalian(value: string): boolean {
+  const text = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  return /\b(?:una|un|per|crea|creami|mockami|simula|apri|questa|questo|voglio|vorrei|ora)\b/.test(text)
+}
+
 function Sprite({ mood, loading, size, resting, greeting = false }: { mood: CompanionMood; loading: boolean; size: number; resting: boolean; greeting?: boolean }) {
   const frame = loading || mood === 'thinking' ? 1 : mood === 'concerned' ? 2 : 0
   return (
@@ -32,16 +38,41 @@ function Sprite({ mood, loading, size, resting, greeting = false }: { mood: Comp
   )
 }
 
-export function AICompanion() {
+/** Distanza dall'angolo in basso a destra entro cui il launcher di a0 compare. */
+const LAUNCHER_REVEAL_PX = 160
+
+/** true quando il puntatore è vicino all'angolo in basso a destra: il launcher resta nascosto e non intralcia. */
+function usePointerNearCorner(enabled: boolean): boolean {
+  const [near, setNear] = useState(false)
+  useEffect(() => {
+    if (!enabled) return
+    let current = false
+    const update = (next: boolean) => { if (next !== current) { current = next; setNear(next) } }
+    const onMove = (event: MouseEvent) => update(window.innerWidth - event.clientX < LAUNCHER_REVEAL_PX && window.innerHeight - event.clientY < LAUNCHER_REVEAL_PX)
+    const onLeave = () => update(false)
+    window.addEventListener('mousemove', onMove, { passive: true })
+    document.documentElement.addEventListener('mouseleave', onLeave)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      document.documentElement.removeEventListener('mouseleave', onLeave)
+    }
+  }, [enabled])
+  return enabled && near
+}
+
+export function AICompanion({ initiallyOpen = false }: { initiallyOpen?: boolean }) {
   const ai = useSettingsStore((state) => state.settings.ai)
   const collections = useCollectionsStore((state) => state.collections)
+  const addQuickRequest = useCollectionsStore((state) => state.addQuickRequest)
   const activeTabId = useTabsStore((state) => state.activeTabId)
   const tabs = useTabsStore((state) => state.tabs)
   const updateRequest = useTabsStore((state) => state.updateRequest)
+  const openTab = useTabsStore((state) => state.openTab)
   const setActiveRail = useAppStore((state) => state.setActiveRail)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(initiallyOpen)
+  const launcherRevealed = usePointerNearCorner(!open)
   const [expanded, setExpanded] = useState(false)
-  const [greeting, setGreeting] = useState(false)
+  const [greeting, setGreeting] = useState(initiallyOpen)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -86,31 +117,104 @@ export function AICompanion() {
     setModelMenuOpen(false)
   }
 
+  const generateMock = async (action: GenerateMockAction): Promise<number> => {
+    await ensureAIConfigured()
+    const raw = await AIEngine.GenerateMockEndpoints('natural', action.description)
+    const endpoints = generatedMockEndpointsToStored(JSON.parse(raw) as unknown)
+    if (!endpoints.length) throw new Error('The AI provider did not return any valid mock endpoints.')
+    await appendMockEndpoints(endpoints)
+    setActiveRail('mock')
+    return endpoints.length
+  }
+
   const send = async (value = input) => {
     const text = value.trim()
     if (!text || loading) return
     setInput('')
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', text }
-    if (isBugHuntPlayIntent(text)) {
+    const localRequestAction = ai.workspaceActionsEnabled ? inferCompanionRequestAction(text) : null
+    if (localRequestAction) {
+      const request = materializeCompanionRequest(localRequestAction)
+      const collectionId = addQuickRequest(request)
+      openTab(request, collectionId)
+      setActiveRail('collections')
       setMessages((current) => [...current, userMessage, {
         id: crypto.randomUUID(),
         role: 'assistant',
         mood: 'happy',
-        text: 'Sure — launching Bug Hunt.',
+        text: prefersItalian(text)
+          ? 'Ho creato la Greeting API nella radice del workspace e l’ho aperta per la revisione.'
+          : 'Created the Greeting API at workspace root and opened it for review.',
       }])
-      document.dispatchEvent(new Event('adomnia:open-bug-hunt'))
+      return
+    }
+    const localMockAction = ai.workspaceActionsEnabled ? inferMockGenerationAction(text) : null
+    if (localMockAction) {
+      setMessages((current) => [...current, userMessage])
+      setLoading(true)
+      try {
+        const count = await generateMock(localMockAction)
+        setMessages((current) => [...current, {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          mood: 'happy',
+          text: prefersItalian(text)
+            ? `Ho generato ${count} endpoint e li ho aperti nel Mock Server per la revisione.`
+            : `Generated ${count} endpoints and opened them in Mock Server for review.`,
+        }])
+      } catch (error) {
+        setMessages((current) => [...current, {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          mood: 'concerned',
+          text: `${prefersItalian(text) ? 'Non sono riuscito a generare il mock.' : 'I could not generate the mock.'} ${error instanceof Error ? error.message : String(error)}`,
+        }])
+      } finally {
+        setLoading(false)
+      }
       return
     }
     setMessages((current) => [...current, userMessage])
     setLoading(true)
     try {
-      const prompt = buildCompanionPrompt(text, collections, activeTab?.request)
+      const prompt = buildCompanionPrompt(
+        text,
+        collections,
+        activeTab?.request,
+        ai.workspaceActionsEnabled,
+        messages.filter((message) => message.id !== WELCOME.id).map(({ role, text: messageText }) => ({ role, text: messageText })),
+      )
       await ensureAIConfigured()
       const raw = await AIEngine.Complete(prompt.system, prompt.user, 1800)
       const reply = parseCompanionReply(raw)
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', text: reply.reply, mood: reply.mood, headers: reply.headerSuggestions, actions: reply.actions }])
+      let createdRequests = 0
+      let createdMockEndpoints = 0
+      if (ai.workspaceActionsEnabled) {
+        for (const action of reply.workspaceActions) {
+          if (action.type === 'create-request') {
+            const request = materializeCompanionRequest(action)
+            const collectionId = addQuickRequest(request)
+            openTab(request, collectionId)
+            createdRequests += 1
+          } else if (action.type === 'generate-mock') {
+            createdMockEndpoints += await generateMock(action)
+          }
+        }
+      }
+      if (createdRequests > 0 && createdMockEndpoints === 0) setActiveRail('collections')
+      for (const action of reply.navigationActions) setActiveRail(action.panel)
+      const resultParts: string[] = []
+      if (createdRequests > 0) resultParts.push(prefersItalian(text) ? `${createdRequests} richieste create` : `${createdRequests} request${createdRequests === 1 ? '' : 's'} created`)
+      if (createdMockEndpoints > 0) resultParts.push(prefersItalian(text) ? `${createdMockEndpoints} endpoint mock generati` : `${createdMockEndpoints} mock endpoint${createdMockEndpoints === 1 ? '' : 's'} generated`)
+      const actionResult = resultParts.length ? `\n\n${resultParts.join(' · ')}.` : ''
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', text: `${reply.reply}${actionResult}`, mood: reply.mood, headers: reply.headerSuggestions, actions: reply.actions }])
     } catch (error) {
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', mood: 'concerned', text: `I couldn’t reach the configured AI provider. ${error instanceof Error ? error.message : String(error)}` }])
+      setMessages((current) => [...current, {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        mood: 'concerned',
+        text: `${prefersItalian(text) ? 'Non riesco a raggiungere il provider AI configurato.' : 'I couldn’t reach the configured AI provider.'} ${error instanceof Error ? error.message : String(error)}`,
+      }])
     } finally {
       setLoading(false)
     }
@@ -179,7 +283,7 @@ export function AICompanion() {
           </form>
         </section>
       )}
-      {!open && <button type="button" onClick={() => { setGreeting(true); setOpen(true) }} aria-label="Open a0 AI assistant" title="Ask a0" className="a0-companion-launcher grid h-12 w-12 place-items-center rounded-full border border-border-1 bg-surface-1/95 shadow-lg transition-colors hover:border-accent/45 focus-visible:border-accent focus-visible:outline-none"><Sprite mood={mood} loading={loading} size={48} resting={!loading} /></button>}
+      {!open && <button type="button" onClick={() => { setGreeting(true); setOpen(true) }} aria-label="Open a0 AI assistant" title="Ask a0" data-revealed={launcherRevealed || loading ? 'true' : undefined} className="a0-companion-launcher grid h-12 w-12 place-items-center rounded-full border border-border-1 bg-surface-1/95 shadow-lg hover:border-accent/45 focus-visible:border-accent focus-visible:outline-none"><Sprite mood={mood} loading={loading} size={48} resting={!loading} /></button>}
     </div>
   )
 }

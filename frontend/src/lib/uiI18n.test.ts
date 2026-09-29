@@ -65,11 +65,11 @@ const TECHNICAL_ATTRIBUTE_VALUES = new Set([
 ])
 
 const TECHNICAL_JSX_TEXT = new Set([
-  'ESC', 'Up/Down', 'Enter', 'Ctrl/Cmd + K', 'Ctrl/Cmd + K or P', 'Ctrl+N', 'LOG', 'S', 'Ctrl', '+',
+  'ESC', 'Up/Down', 'Enter', 'Tab', 'Ctrl/Cmd + K', 'Ctrl/Cmd + K or P', 'Ctrl+N', 'LOG', 'S', 'Ctrl', '+',
   'adOmnia paratus.', 'commit · branch · diff · merge · stash · push', 'main', 'local', 'Diff',
   'PSD2', 'Ctrl/Cmd + F', 'Ctrl/Cmd&nbsp;+&nbsp;F', 'host:port', 'api.example.com:443', 'http://127.0.0.1', 'n', 'p', 'Esc', '\\n',
   'ms', 'vault', '+', '−',
-  'Mock', 'Proxy', 'Aa', 'Ab',
+  'Mock', 'Proxy', 'Aa', 'Ab', 'gO',
 ])
 
 function normalized(value: string): string {

@@ -39,6 +39,7 @@ var storeBuckets = []string{
 	"flows",              // editable API flow definitions (created on opening existing DBs)
 	"pdfprojects",        // PDF Editor projects (base64 PDF bytes + annotation layer)
 	"extensions_v2",      // extension registry, grants, settings, and scoped state
+	"goide",              // Go Studio session metadata; project files remain on disk
 }
 
 const storagePutMaxBodyBytes = 100 * 1024 * 1024

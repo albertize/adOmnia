@@ -65,6 +65,7 @@ const VaultPanel           = React.lazy(() => import('@/components/vault/VaultPa
 const SettingsPanel        = React.lazy(() => import('@/components/settings/SettingsPanel').then(m => ({ default: m.SettingsPanel })))
 const GitSyncPanel         = React.lazy(() => import('@/components/workspace/GitSyncPanel').then(m => ({ default: m.GitSyncPanel })))
 const McpPanel             = React.lazy(() => import('@/components/mcp/McpPanel').then(m => ({ default: m.McpPanel })))
+const GoStudioPanel        = React.lazy(() => import('@/components/goide/GoStudioPanel').then(m => ({ default: m.GoStudioPanel })))
 
 function PanelSkeleton() {
   const tr = useUiTranslation()
@@ -1242,6 +1243,7 @@ function panelFor(activeRail: RailItem): PanelDef {
     case 'secretscanner': return { component: <UtilsPanel initialTool="secretscanner" />, titleKey: 'Power Tools', overflow: true }
     case 'gitsync':     return { component: <GitSyncPanel />,         titleKey: 'Git Sync', overflow: true }
     case 'mcp':         return { component: <McpPanel />,             titleKey: 'MCP Client', overflow: true }
+    case 'goide':       return { component: <GoStudioPanel />,        titleKey: 'goide', overflow: true }
     case 'settings':    return { component: <SettingsPanel />,        titleKey: 'settings' }
     default:            return { component: <WelcomePanel /> }
   }
@@ -1257,8 +1259,11 @@ export function MainArea() {
 
   // Alt+← to go back, Escape to close secondary panels
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    const tag = (e.target as HTMLElement).tagName
+    const target = e.target as HTMLElement
+    const tag = target.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+    // Un pannello che ha già gestito il tasto (es. Back di Go Studio) o un editor di codice hanno la precedenza.
+    if (e.defaultPrevented || target.isContentEditable || target.closest?.('.monaco-editor')) return
     if (e.altKey && e.key === 'ArrowLeft') {
       e.preventDefault()
       goBack()

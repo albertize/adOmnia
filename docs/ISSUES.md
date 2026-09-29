@@ -34,16 +34,6 @@ for what the current plugin runtime actually ships.
 - [ ] Phase 5: adOmnia domain APIs and extension points.
 - [ ] Phase 6: legacy adapter, hardening, cross-platform verification, and general availability.
 
-### a0: Bug Hunt — campagna implementata, rifinitura aperta
-
-- [x] Concept, reference di a0, specifica e piano di ripresa completati durante lo sviluppo della campagna.
-- [x] Localhost completo e verificato nel runtime desktop (manca la prova umana "a sensazione" dei controlli).
-- [x] Tre livelli collegati, attivazione segreta, API Gateway e boss Production implementati (2026-09-17).
-- [x] 2026-09-22: personalità di a0, Localhost esteso con 15 nemici e tre vite totali; 58 test gioco e verifica visiva browser.
-- [ ] Partita completa desktop della nuova campagna a tre vite, bilanciamento e rifinitura finale.
-
-Aggiornare questa coda dopo ogni sessione di playtest desktop.
-
 ## Recently Resolved (verified against code 2026-06-13)
 
 | # | Title | Evidence |
@@ -54,6 +44,35 @@ Aggiornare questa coda dopo ogni sessione di playtest desktop.
 | N03 | Win95 JSON bracket depth colors collapsed | `internal/themes/extended.go` json-bracket-1/2/3 are distinct (`#000080`/`#8B0000`/`#006464`), not all `#000000`. |
 
 ## New This Cycle
+
+### Go Studio (Go IDE) — shipped through v0.9.39, manual verification open
+
+Implemented and covered by automated tests on Windows and Linux: projects and trust, isolated sessions and restore, gopls intelligence and refactoring, linters, Fix with AI, build/run/tests/coverage, the Delve debugger, the PTY terminal, Go Tools, Git in the editor linked to Git Studio, adOmnia integrations, Go Studio workspaces and separate project windows. Details: [GO-STUDIO.md](GO-STUDIO.md). The work queue lives in `todo-ide.md`.
+
+Open:
+
+- [ ] **P1 — Manual checks in the running app** (M1–M31 in `todo-ide.md`): real-project flows on Windows, Task Manager clean-up, ConPTY in the window, debugger from the UI, themes, and the quality bar compared with the approved mocks.
+- [ ] **P2 — Separate windows not declared yet**: implemented and tested automatically; to be declared in the release notes after the real-window check (M31).
+- [ ] **P1 — Docker Build & Run by hand** (v0.9.39): with Docker Desktop running, Build image, Build & Run and Stop on a real Dockerfile (container removed, `docker ps` clean). The automated test skips without a daemon; Make is already covered end to end.
+- [ ] **P3 — macOS runtime not verified**: the package cross-builds, but nothing has run on macOS.
+
+Residual limits (by design, stated in the product):
+
+- Push, pull, merge, conflicts, rebase and stash stay in Git Studio; other version control systems are not supported.
+- Plugins get read-only events (contract v1) and no commands.
+- The API Client CodeLens resolves route prefixes only within the same file.
+- Remote debugging needs identical source paths for breakpoints.
+- Refactorings are limited to the code actions gopls offers.
+- Fix with AI needs an AI provider enabled and verified in Settings, and sends the affected code only when the user clicks.
+
+
+### Developer Context P0+P1 — implemented (branch `feat/devcontext`, 2026-09-29)
+
+- [x] Entity router (`frontend/src/lib/entities/`), panel handoff, notice bar
+- [x] Project context backend (`internal/devcontext`): go.mod, compose, .env (masked), OAS/proto/WSDL, Go routes, getenv/SQL/topics
+- [x] Palette groups Project + Symbols, Tab actions
+- [ ] Manual smoke in `wails3 task dev` on a real Go project (see plan Task 13 Step 5)
+- Next: P2 gO code lenses + env resolver.
 
 ### Log Inspector — shipped (v0.9.0, promoted to a rail destination in v0.9.1)
 

@@ -1,12 +1,9 @@
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Titlebar } from '@/components/layout/Titlebar'
 import { Rail } from '@/components/layout/Rail'
-import { Sidebar } from '@/components/layout/Sidebar'
 import { MainAreaRouter } from '@/components/layout/MainAreaRouter'
-import { CommandPalette } from '@/components/layout/CommandPalette'
 import { StatusBar } from '@/components/layout/StatusBar'
 import { ThemeProvider } from '@/components/themes/ThemeProvider'
-import { DevLogOverlay } from '@/components/ui/DevLogOverlay'
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost'
 import { StorageQuotaBanner } from '@/components/layout/StorageQuotaBanner'
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
@@ -14,8 +11,8 @@ import { ResizeHandle } from '@/components/ui/ResizeHandle'
 import { DropOverlay } from '@/components/layout/DropOverlay'
 import { DropToast } from '@/components/layout/DropToast'
 import { PluginNotificationToast } from '@/components/plugins/PluginNotificationToast'
-import { ExtensionContributionHost } from '@/components/plugins/ExtensionContributionHost'
-import { AICompanion } from '@/components/assistant/AICompanion'
+import { AICompanionHost } from '@/components/assistant/AICompanionHost'
+import { WorkspaceSidebarSkeleton } from '@/components/layout/WorkspaceHydrationShell'
 import { useAppStore } from '@/stores/app'
 import { useAppInit } from '@/hooks/useAppInit'
 import { useAppearance } from '@/hooks/useAppearance'
@@ -32,9 +29,24 @@ import { setExtensionWorkspaceContext } from '@/lib/extensions-v2-api'
 import { RecordStartupPerformance } from '@/wailsjs/go/main/App'
 import { saveWorkspaceStartupHint } from '@/lib/startupHints'
 import { findSpatialFocusIndex, focusableElements, ownsArrowKey } from '@/lib/accessibility'
+import { initialRailFromMemento } from '@/lib/uiSessionMemento'
 
 const SIDEBAR_WIDTH_KEY = 'adomnia.sidebarWidth'
-const BugHuntOverlay = React.lazy(() => import('@/components/bughunt/BugHuntOverlay').then((module) => ({ default: module.BugHuntOverlay })))
+let sidebarModulePromise: Promise<typeof import('@/components/layout/Sidebar')> | undefined
+function loadSidebarModule() {
+  return sidebarModulePromise ??= import('@/components/layout/Sidebar')
+}
+const Sidebar = React.lazy(() => loadSidebarModule().then((module) => ({ default: module.Sidebar })))
+// Restored API workspaces fetch their sidebar alongside bootstrap, rather than
+// waiting for React. A fresh Hub never requests this optional chunk.
+if (initialRailFromMemento() === 'collections') void loadSidebarModule().catch(() => undefined)
+import { EntityNotice } from '@/components/layout/EntityNotice'
+const CommandPalette = React.lazy(() => import('@/components/layout/CommandPalette').then((module) => ({ default: module.CommandPalette })))
+const ExtensionContributionHost = React.lazy(() => import('@/components/plugins/ExtensionContributionHost').then((module) => ({ default: module.ExtensionContributionHost })))
+// Go Studio (store, API, LSP) resta fuori dal bundle iniziale: la guardia di chiusura serve
+// solo con buffer modificati o processi attivi, impossibili prima del primo frame stabile.
+const GoStudioCloseGuard = React.lazy(() => import('@/components/goide/GoStudioCloseGuard').then((module) => ({ default: module.GoStudioCloseGuard })))
+const DevLogOverlay = React.lazy(() => import('@/components/ui/DevLogOverlay').then((module) => ({ default: module.DevLogOverlay })))
 const SIDEBAR_WIDTH_MIN = 180
 const SIDEBAR_WIDTH_MAX = 0.40
 
@@ -52,13 +64,14 @@ function loadSidebarWidth(): number {
 
 function App() {
   const tr = useUiTranslation()
-  const { activeWindowChrome, commandPaletteOpen, setCommandPaletteOpen } = useAppInit()
+  const { activeWindowChrome, commandPaletteOpen, setCommandPaletteOpen, firstStableFrame } = useAppInit()
   const { dragOver, dropPreview, dropFeedback, handlers } = useFileDrop()
   const devLogVisible  = useAppStore((s) => s.devToolsVisible)
   const toggleDevTools = useAppStore((s) => s.toggleDevTools)
   const activeRail     = useAppStore((s) => s.activeRail)
   const sidebarCollapsed = useSettingsStore((s) => s.settings.appearance.sidebarCollapsed)
   const showSidebar    = activeRail === 'collections' && !sidebarCollapsed
+  const goStudioMaximized = useAppStore((s) => s.goStudioMaximized || s.goStudioZen) && activeRail === 'goide'
   const workspaceHydrated = useWorkspaceHydration()
   const workspaceShellPhase = useWorkspaceHydrationShell(workspaceHydrated)
   const addDevLog = useDevLogsStore((s) => s.addEntry)
@@ -67,10 +80,19 @@ function App() {
   useKeyboardShortcuts({ setCommandPaletteOpen })
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(loadSidebarWidth)
-  const [bugHuntOpen, setBugHuntOpen] = useState(false)
   const appRootRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const isDragging = useRef(false)
+
+  useEffect(() => {
+    // Dynamic import keeps the gO store out of the startup bundle (check:startup budget).
+    let disposers: Array<() => void> = []
+    let disposed = false
+    void Promise.all([import('@/stores/devcontext'), import('@/lib/entities/openers')]).then(([devcontext, openers]) => {
+      if (!disposed) disposers = [devcontext.startDevContextSync(), openers.registerDefaultOpeners()]
+    })
+    return () => { disposed = true; disposers.forEach((dispose) => dispose()) }
+  }, [])
 
   useEffect(() => {
     markStartup('startup:react-mounted')
@@ -81,12 +103,6 @@ function App() {
     if (!workspaceHydrated || !activeWorkspaceId) return
     void setExtensionWorkspaceContext(activeWorkspaceId)
   }, [activeWorkspaceId, workspaceHydrated])
-
-  useEffect(() => {
-    const open = () => setBugHuntOpen(true)
-    document.addEventListener('adomnia:open-bug-hunt', open)
-    return () => document.removeEventListener('adomnia:open-bug-hunt', open)
-  }, [])
 
   useEffect(() => {
     const handleSpatialNavigation = (event: KeyboardEvent) => {
@@ -181,12 +197,12 @@ function App() {
           {activeWindowChrome !== 'system' && <Titlebar />}
           <StorageQuotaBanner />
           <div className="flex flex-1 min-h-0">
-            <Rail />
+            {!goStudioMaximized && <Rail />}
             {/* Resizable sidebar wrapper — hidden on welcome hub */}
             {showSidebar && (
               <>
                 <div className="shrink-0 flex flex-col min-h-0 overflow-hidden" style={{ width: sidebarWidth }}>
-                  <Sidebar />
+                  <Suspense fallback={<WorkspaceSidebarSkeleton quiet />}><Sidebar /></Suspense>
                 </div>
                 {/* Sidebar drag handle */}
                 <ResizeHandle
@@ -199,17 +215,18 @@ function App() {
             )}
             <ErrorBoundary><MainAreaRouter /></ErrorBoundary>
           </div>
-          <StatusBar />
+          {!goStudioMaximized && <StatusBar />}
           {dragOver && <DropOverlay preview={dropPreview} />}
           {dropFeedback && <DropToast feedback={dropFeedback} />}
           <PluginNotificationToast />
-          <ExtensionContributionHost />
-          <AICompanion />
-          {bugHuntOpen && <Suspense fallback={<div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#070817] text-white">{tr('Loading Bug Hunt…')}</div>}><BugHuntOverlay onClose={() => setBugHuntOpen(false)} /></Suspense>}
+          {firstStableFrame && <Suspense fallback={null}><ExtensionContributionHost /></Suspense>}
+          <AICompanionHost ready={firstStableFrame} />
         </div>
-        <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
+        {commandPaletteOpen && <Suspense fallback={null}><CommandPalette open onClose={() => setCommandPaletteOpen(false)} /></Suspense>}
+        <EntityNotice />
         <ConfirmDialogHost />
-        {import.meta.env.DEV && <DevLogOverlay visible={devLogVisible} onClose={toggleDevTools} />}
+        {firstStableFrame && <Suspense fallback={null}><GoStudioCloseGuard /></Suspense>}
+        {import.meta.env.DEV && devLogVisible && <Suspense fallback={null}><DevLogOverlay visible onClose={toggleDevTools} /></Suspense>}
       </ThemeProvider>
     </ErrorBoundary>
   )

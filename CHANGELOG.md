@@ -4,6 +4,206 @@ All notable changes to adOmnia are documented here.
 
 This project follows a pragmatic release log format inspired by Keep a Changelog. Versions are created from Git tags such as `v0.1.0`; GitHub Actions builds the Windows, Linux, and macOS artifacts automatically.
 
+## [Unreleased]
+
+### Added
+- **Go Studio editor core:** Sticky Scopes, optional Minimap, Font Ligatures, Zoom (Ctrl+= / Ctrl+- / Ctrl+0), Zen Mode (Alt+Shift+Z), Preview Tab, Type Hints, Save Files on Focus Change, Trim Trailing Whitespace on Save, project-root `.editorconfig` support and Replace in Files through the change preview.
+
+## [0.9.41] - 2026-09-29
+
+### Added
+- **Concurrency-first debugger in Go Studio:** the Debug tool window groups goroutines by package and starting function, shows each goroutine's state (running, chan receive/send, select, mutex, WaitGroup, sleep, I/O…), what it is blocked on and the source line, with a detail card and a folded call stack.
+- **Concurrency view:** a state summary, diagnostics for possible deadlocks, blocked channels, mutex contention, possible goroutine leaks and data races, and a flow of starting function → goroutines → awaited channels and mutexes.
+- **Race detector:** *Run → Test Current Package with Race Detector* runs `go test -race`. Race reports from tests, runs and the debug console become navigable cards with both accesses and the creation stacks.
+- **Inline values while debugging:** variable values appear at the end of the lines of the paused function.
+- **More debug keys:** F6 and F10 also step over, F5 also resumes (only while paused).
+
+### Changed
+- The Debug tool window is redesigned: larger text, grouped toolbar, Session / Concurrency switch, typed value colours, copy value, lazily loaded scopes and package globals (Delve `showGlobalVariables`, system goroutines hidden).
+
+### Fixed
+- The `danger` colour was missing from the Tailwind theme, so error and stop colours in Go Studio had no effect.
+- Coloured icon buttons in Go Studio (Run, Debug, Stop, Restricted) lost their colour because unlayered CSS overrode Tailwind 4 utilities.
+- gopls telemetry is really off: `GOTELEMETRY=off` is read-only for Go's telemetry library and still started the `** telemetry **` process. gopls now starts with `GO_TELEMETRY_CHILD=2`, which starts no telemetry process (verified with gopls v0.23.0 on Windows) and leaves the global `go telemetry` mode untouched.
+
+### Verified
+- Go Studio Go tests pass, including goroutine state inference and race report collection.
+- 768 frontend tests across 170 files, TypeScript, the production build and the startup budget pass.
+- The debugger UI was checked against a simulated paused session; a real Delve session with blocked goroutines still needs a manual check.
+
+Full release notes: [v0.9.41](docs/releases/v0.9.41.md).
+
+## [0.9.40] - 2026-09-29
+
+### Added
+- **Maximize Editor in Go Studio:** Ctrl/Cmd+Shift+F12 or a double-click on an editor tab hides Project, Structure and the bottom tool window, and restores them as they were. Project and Structure get a hide button, and Project a shortcut (Alt+1).
+- **Modern Go Studio menus:** icons on every command, check marks for toggles, rounded studio panels and keycap shortcuts.
+- **docker compose in Go Studio:** ▶ on `services:` (Up all, Down) and on each service (Up), with Stop running `docker compose stop` and a *Docker Compose* run configuration type.
+- **Send to API Workspace:** right-click a Postman, Insomnia, Bruno, OpenAPI or Swagger file in the Go Studio project tree to import it into the API Workspace.
+- **Recent projects in the Go Studio project menu:** projects that are not open can be reopened from the toolbar.
+- **Encrypt private keys in Power Tools:** the PEM / JKS tool encrypts and decrypts private keys as standard PKCS#8 (PBKDF2-SHA256 600k + AES-256-CBC, verified with OpenSSL). Go Studio opens `.pem`/`.key`/`.crt`/`.cer` there from the project tree.
+- **File icons:** the Jenkins emblem for Jenkinsfiles, and a key for `.pem`, `.key`, `.p12`, `.pfx` and `.jks`.
+- **Maximize Go Studio:** a toolbar button and Ctrl/Cmd+Shift+F11 hide adOmnia's rail, panel header and status bar.
+
+### Changed
+- Confirmation dialogs are redesigned: commands and paths sit in a structured, wrapped, monospaced section, and the dialog has a clear icon (command, question or deletion), a soft blurred backdrop, a spring entry and safe default focus. Go Studio dialogs share the same backdrop and animation.
+- The a0 launcher in the bottom-right corner stays hidden and click-through until the pointer comes near the corner (or it gets keyboard focus).
+- gopls runs with `GOTELEMETRY=off` and `GOMEMLIMIT=1GiB` unless you set them yourself.
+- The README presents adOmnia as one local workspace for APIs and the code behind them, with a gO Studio screenshot.
+
+### Verified
+- Go Studio, nettools and Developer Context Go tests pass, including key encryption opened with the real OpenSSL.
+- 760 frontend tests across 169 files, TypeScript, the production build and the startup budget pass.
+- Docker compose, Dockerfile Build & Run and Stop still need a manual check with Docker Desktop running.
+
+Full release notes: [v0.9.40](docs/releases/v0.9.40.md).
+
+## [0.9.39] - 2026-09-29
+
+### Added
+- **Makefiles and Dockerfiles run in Go Studio:** the gutter ▶ offers *Run 'make target'* on every Makefile target, and *Build image* / *Build & Run container* on every Dockerfile stage. Output goes to the Run console with Stop and Rerun.
+  - Build & Run starts `docker run --rm -i` only after a successful build, publishing the `EXPOSE` ports.
+  - Stop runs `docker stop` on the container.
+  - New Run Configuration types: *Make target*, *Docker build* and *Docker build & run*.
+  - *Save as Run Configuration…* prefills Dockerfile `ARG`s and marks sensitive ones secret. Secret build args and container variables pass only through the environment (`--build-arg NAME`, `-e NAME`).
+  - make is found on `PATH` (`make`, `gmake`, `mingw32-make`), in GnuWin32, or at a path set in Tool Paths.
+- **Islands look for Go Studio:** Project, Editor, Structure and the bottom tool window become rounded islands on a darker ground, with pill tabs, gap resize handles and theme-token dark and light variants.
+- **Developer Context and entity router:** a local scan of the Go Studio project. It covers modules, services, compose datasources, masked `.env`, OpenAPI/proto/WSDL, Go routes, env reads, SQL tables and topics. Results feed Ctrl+K *Project* and *Symbols* groups, with actions into the API Client, Mock, Database, Broker, API Docs, gRPC and SOAP studios.
+- **New Hub:** an aO → gO ecosystem hero, Go Studio as the featured workspace with a static preview, and the a0 laptop scene.
+
+### Fixed
+- Go Studio showed HTML, CSS, JavaScript, Dockerfile, SQL, XML, shell and other non-Go files as plain text. They are now highlighted with Monaco's bundled languages, plus a Makefile tokenizer. Makefiles keep real tabs.
+- Developer Context never leaks `.env` passwords (quoted values with comments, PASS/PWD keys, DSN forms), shares the first scan between concurrent requests, and serves only detected contracts.
+- Entity handoffs to a panel that is still loading end with a notice instead of being dropped silently.
+
+### Verified
+- Go Studio tests pass, including a Makefile end-to-end test with the real `make`.
+- 755 frontend tests across 168 files, TypeScript, the production build and the startup budget (592,314 bytes) pass.
+- The Docker end-to-end test skips without a running daemon; Build & Run and Stop need a manual check with Docker Desktop running.
+
+Full release notes: [v0.9.39](docs/releases/v0.9.39.md).
+
+## [0.9.38] - 2026-09-29
+
+### Added
+- **Fix with AI in Go Studio:** a quick fix (lightbulb, Alt+Enter, error hover) and a Problems button that ask the AI provider configured in Settings to fix a Go error or warning. The file and, for `undefined: pkg.Name`, the local package are sent only on click. The answer may touch only those files and always opens in the change preview, applied all-or-nothing and undoable.
+- **Real file icons:** gopher for Go sources with a test marker, the Go logo for `go.mod`/`go.work`/`go.sum`, and brand icons for Docker, Git, GitHub Actions, `.env`, Make, OpenAPI, Markdown, YAML, JSON and more across the tree, tabs, Quick Open, Search Everywhere, Find in Files and Problems. The 45 Simple Icons marks (CC0) are generated by `scripts/generate-brand-icons.mjs` and fall back to the text colour when the brand colour is not readable on the active theme.
+
+### Verified
+- 734 frontend tests across 162 files, TypeScript, the production build and the startup budget (584,053 bytes) pass.
+
+Full release notes: [v0.9.38](docs/releases/v0.9.38.md).
+
+## [0.9.37] - 2026-09-29
+
+### Added
+- **Go Studio sessions and terminal:** isolated multi-project sessions, restore of tabs, layout and unsaved buffers, persisted run configurations without secrets, a real PTY terminal (ConPTY on Windows) and a file watcher with cross-project conflict detection.
+- **Tests and debugging:** structured test runner with Rerun Failed, editor coverage, and a Delve (DAP) debugger with breakpoints, stepping, variables, watches, attach and remote `dlv --headless`.
+- **GoLand parity:** gopls refactorings with multi-file preview, implementation markers, navigation history, bookmarks, Search Everywhere, Go Tools menu, local history, TODO window, split tabs and GoLand keymap.
+- **Git and adOmnia integration:** Git in the editor (branch, gutter diff with hunk revert, blame, history, commit, branch switch); Git Studio follows the Go Studio project's repository; Project Services for Docker Lab, Database and Broker Studio; "Open in API Client" CodeLens; read-only plugin events.
+- **Workspaces and windows:** Go Studio workspaces separate from API workspaces; a project can move to its own window with single-window ownership and guarded close.
+- **UI:** JetBrains-style Go Studio chrome.
+
+### Fixed
+- Process output lost at exit or split inside UTF-8 characters; concurrent runs exceeding the limit; unordered saves; a corrupt state file blocking Go Studio; case collisions in Linux recovery buffers.
+- A data race when starting the debugger.
+- Initial JavaScript over the 650 kB startup budget.
+- `build.ps1` aborting when its output is redirected under Windows PowerShell 5.1.
+
+### Verified
+- 711 frontend tests across 159 files, TypeScript, the production build and the startup budget pass. `go vet`, staticcheck and `go test -race` pass for `internal/goide` and `internal/goidewindow` on Windows with Delve.
+
+Full release notes: [v0.9.37](docs/releases/v0.9.37.md).
+
+## [0.9.36] - 2026-09-28
+
+### Added
+- **Go Studio editing:** real project tree, Monaco tabs with atomic saves, external-change handling, Quick Open, pinned tabs, reopen closed tab, split editor and a symbolic breadcrumb. `.go` files show a Go gopher icon.
+- **gopls intelligence:** per-project language server using the selected Go SDK, unsaved-buffer diagnostics, completion with auto-imports, hover, signature help, definition, implementation, usages, workspace symbols, previewed multi-file rename, code actions, reformat and optimize imports (also on save), a Structure pane and read-only navigation into Go SDK sources.
+- **Linting:** golangci-lint or staticcheck, respecting project configuration, with cancellable runs, optional lint on save and findings in Problems, the gutter and the status bar.
+- **Run and test:** Build/Run/Stop/Restart with stdin and clickable output, plus gutter ▶ actions for `func main` and individual tests and benchmarks. Tool windows for Run, Problems, Usages and Find in Files.
+- **Toolchain and tools:** official Go SDK install and per-project selection; confirmed installs for gopls, golangci-lint and staticcheck; custom tool paths; dependency management through previewed `go get` and `go mod tidy`.
+- **IDE menu bar:** File, Edit, View, Navigate, Code, Go, Run and Help with GoLand-style shortcuts and a Keyboard Shortcuts reference.
+
+### Fixed
+- A read-only SDK file could overwrite another file's unsaved buffer when switching tabs.
+- Process Stop no longer races with natural exit, and gopls reports its final state as soon as Stop returns.
+- Cancelled requests no longer produce unhandled promise rejections.
+- Ctrl/Cmd+W inside Go Studio no longer closes a hidden HTTP tab.
+
+### Verified
+- 595 frontend tests across 130 files, TypeScript and the production build pass. `go vet` and `go test -race ./internal/goide/...` pass against real gopls, golangci-lint and staticcheck, and the package cross-builds for Windows and macOS.
+
+Full release notes: [v0.9.36](docs/releases/v0.9.36.md).
+
+## [0.9.35] - 2026-09-28
+
+### Added
+- **Go Studio foundation:** a dedicated local-first Go IDE domain now owns workspace sessions, documents, toolchain metadata, structured processes, LSP, terminal, debug, tests and versioned persistence behind thin Wails bindings.
+- **Go Studio navigation:** the new panel is available from the compact `gO` rail entry, router, command palette, translations and a dedicated Zustand store without changing Git Sync ownership.
+- **Safe project opening:** choosing a project records its resolved local root and Go module/workspace metadata without running repository code, scripts, hooks, tests or tools. Tool authorization remains a separate explicit state.
+- **Architecture contract:** the Go Studio ADR records gopls/LSP, ConPTY/PTY, Delve/DAP, process limits, lifecycle, persistence and multiwindow decisions. `todo-ide.md` tracks sequential implementation gates and the approved visual references.
+
+### Security
+- Project paths are normalized, symlinks are resolved and document access is confined to the real project root.
+- Persisted IDE metadata excludes document contents, environment values and credentials; no new network listener is exposed by Go Studio.
+
+### Verified
+- 565 frontend tests across 122 files, TypeScript, the production frontend build, `go test ./...`, `go build ./...`, `go vet ./...` and the Go Studio race test pass.
+- The Go Studio domain cross-builds for Linux and macOS. Wails beta.25 bindings and the Windows desktop runtime were built and launched with an isolated profile; the rail and command-palette flows were exercised in the local preview.
+
+Full release notes: [v0.9.35](docs/releases/v0.9.35.md).
+
+## [0.9.34] - 2026-09-28
+
+### Added
+- **AI product model:** a0 now consults a compact capability map of every adOmnia tool (HTTP collections, Mock Server, Broker Studio, Database Studio, MCP, browser/HAR debuggers and more), so it reasons about the product that actually exists instead of inventing generic API-tool features.
+- **AI mock generation:** with Agent actions enabled, a0 can generate local Mock Server endpoints from a natural-language description, convert them into the reviewed persisted shape, and open them for review.
+- **AI panel navigation:** a0 can return validated `open-panel` actions to open or switch to a specific tool using an exact panel id from the capability map.
+- **Multilingual assistant:** a0 now replies in the same language as the user instead of forcing English.
+- **Conversation context:** a bounded slice of the recent conversation is included in the prompt so follow-up requests stay coherent.
+
+### Changed
+- **Leaner startup:** the fresh Hub loads about 30.5% less initial JavaScript (823,684 → 572,407 uncompressed bytes). Sidebar, command palette, AI assistant, import parsers and closed environment/hosts editors load only when relevant.
+- **AI startup:** an unconfigured assistant no longer loads its provider runtime. A verified assistant mounts after the first stable frame, while early Hub clicks are retained during its asynchronous load. Gateway restoration remains deferred and runs only when enabled.
+- **Workspace resume:** persisted API workspaces preload their sidebar alongside the existing request-workspace preload. Workspace restoration, credentials, settings and storage formats are unchanged.
+- **Startup regression check:** a production-bundle budget now runs in CI and rejects optional AI, YAML, editor, diagram and PDF modules in the static startup graph. Local timing diagnostics contain only numeric timings and byte counts; no telemetry is added.
+- **README:** reorganized the public overview, feature groups, platform installation, AI permissions, CLI workflows, development checks and documentation links.
+
+### Removed
+- **Bundled game:** extracted a0: Bug Hunt into a separate local project, including its source, tests, artwork and development references. adOmnia no longer ships game assets, an overlay or chatbot commands that launch it.
+- **Game-only UI and documentation:** removed unused game translations, preview entry points and the game backlog from the active product documentation. Historical release notes remain intact.
+
+### Unchanged
+- The Hub mascot, a0 AI assistant, workspace actions, API tools, Database Studio and Broker Studio remain available. Workspace data and settings are unchanged; existing local game records are not erased.
+
+### Verified
+- 563 frontend tests pass, together with TypeScript and the production frontend build. The production browser smoke check covers the Hub, command palette, API sidebar, environment and hosts editors, and the AI connection gate.
+- `go build ./...`, `go test ./...` and the canonical Windows Wails production build pass. The separately extracted game retains its source and artwork outside the app.
+- Browser warm-cache first-frame samples remain similar (median 83.8 ms before, 80.9 ms after). These are renderer diagnostics, not a measurement of full native Windows startup; see [the performance guide](docs/PERFORMANCE.md).
+
+Full release notes: [v0.9.34](docs/releases/v0.9.34.md).
+
+## [0.9.33] - 2026-09-27
+
+### Added
+- **Agent actions:** AI Engine now has an explicit permission that lets a0 create and update supported workspace items when the user asks for a mutation.
+- **Root request creation:** structured `create-request` actions are validated, converted into native adOmnia requests, saved outside user collections and opened automatically for review.
+
+### Changed
+- **Useful instead of advisory:** when Agent actions are enabled, a0 is instructed to perform supported explicit requests instead of explaining which UI button the user should click.
+- **Refreshed product screenshots:** the dark, light and Git interface artwork used by the public project has been updated.
+
+### Fixed
+- **Greeting API command:** English and Italian requests to create a greeting API at workspace root have a deterministic local path, so the action still succeeds if a provider ignores the structured-response schema.
+- **Mutation safety:** action URLs, methods, names, headers and bodies are bounded and validated before they can reach the local workspace. Credentials remain excluded from the action protocol.
+
+### Verified
+- A live DeepSeek request using the environment credential completed successfully, and DeepSeek returned the expected `create-request` action for the Italian greeting prompt.
+- All frontend tests, the production frontend build, `go build ./...` and `go test ./...` pass.
+
+Full release notes: [v0.9.33](docs/releases/v0.9.33.md).
+
 ## [0.9.32] - 2026-09-27
 
 ### Added

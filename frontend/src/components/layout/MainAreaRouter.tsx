@@ -36,6 +36,7 @@ const SettingsPanel        = React.lazy(() => import('@/components/settings/Sett
 const GitSyncPanel         = React.lazy(() => import('@/components/workspace/GitSyncPanel').then(m => ({ default: m.GitSyncPanel })))
 const McpPanel             = React.lazy(() => import('@/components/mcp/McpPanel').then(m => ({ default: m.McpPanel })))
 const ExtensionViewsPanel  = React.lazy(() => import('@/components/plugins/ExtensionViewsPanel').then(m => ({ default: m.ExtensionViewsPanel })))
+const GoStudioPanel        = React.lazy(() => import('@/components/goide/GoStudioPanel').then(m => ({ default: m.GoStudioPanel })))
 
 let workspaceModulePromise: ReturnType<typeof importWorkspaceModule> | undefined
 
@@ -145,6 +146,7 @@ function panelFor(activeRail: RailItem): PanelDef {
     case 'secretscanner': return { component: <UtilsPanel initialTool="secretscanner" />, titleKey: 'Power Tools', overflow: true }
     case 'gitsync': return { component: <GitSyncPanel />, titleKey: 'Git Sync', overflow: true }
     case 'mcp': return { component: <McpPanel />, titleKey: 'MCP Client', overflow: true }
+    case 'goide': return { component: <GoStudioPanel />, titleKey: 'goide', overflow: true }
     case 'settings': return { component: <SettingsPanel />, titleKey: 'settings' }
     default: return { component: <WelcomePanel /> }
   }
@@ -152,6 +154,7 @@ function panelFor(activeRail: RailItem): PanelDef {
 
 export function MainAreaRouter() {
   const activeRail = useAppStore((s) => s.activeRail)
+  const maximized = useAppStore((s) => s.goStudioMaximized || s.goStudioZen) && activeRail === 'goide'
   const goBack = useAppStore((s) => s.goBack)
   const workspaceHydrated = useWorkspaceHydration()
   const workspaceShellPhase = useWorkspaceHydrationShell(workspaceHydrated)
@@ -159,8 +162,11 @@ export function MainAreaRouter() {
   const quietWorkspaceShell = workspaceShellPhase === 'quiet'
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    const tag = (event.target as HTMLElement).tagName
+    const target = event.target as HTMLElement
+    const tag = target.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+    // Un pannello che ha già gestito il tasto (es. Back di Go Studio) o un editor di codice hanno la precedenza.
+    if (event.defaultPrevented || target.isContentEditable || target.closest?.('.monaco-editor')) return
     if (event.altKey && event.key === 'ArrowLeft') {
       event.preventDefault()
       goBack()
@@ -181,7 +187,7 @@ export function MainAreaRouter() {
     <main className={`flex-1 flex flex-col min-w-0 relative bg-surface-0${overflow ? ' overflow-hidden' : ''}`}>
       {workspaceHydrating
         ? <WorkspacePanelHeaderSkeleton quiet={quietWorkspaceShell} />
-        : titleKey && <PanelHeader titleKey={titleKey} />}
+        : titleKey && !maximized && <PanelHeader titleKey={titleKey} />}
       <div key={activeRail} className="flex-1 flex flex-col min-w-0 overflow-hidden panel-enter">
         <Suspense fallback={fallback}>
           {workspaceHydrating ? <WorkspaceMainSkeleton quiet={quietWorkspaceShell} /> : component}

@@ -1,0 +1,198 @@
+/*
+ * Stile "Islands": fondo scuro (ground) e pannelli flottanti arrotondati (island).
+ * Tema chiaro: fondo grigio e isole bianche, come nella New UI di JetBrains.
+ */
+.go-studio-root {
+  --gs-ground: var(--color-surface-0);
+  --gs-island: var(--color-surface-1);
+  --gs-raised: var(--color-surface-3);
+  --gs-island-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 10px 30px -12px rgb(0 0 0 / 0.6);
+  --gs-radius: 12px;
+  background: var(--gs-ground);
+}
+html.light .go-studio-root,
+.light .go-studio-root {
+  --gs-ground: var(--color-surface-2);
+  --gs-island: #FFFFFF;
+  --gs-raised: var(--color-surface-1);
+  --gs-island-shadow: 0 0 0 1px rgb(15 23 42 / 0.06), 0 4px 16px -8px rgb(15 23 42 / 0.18);
+}
+.go-studio-island {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--gs-radius);
+  background: var(--gs-island);
+  box-shadow: var(--gs-island-shadow);
+}
+
+/*
+ * Cornice di Go Studio in stile JetBrains New UI: una sola toolbar, barre laterali degli strumenti,
+ * intestazioni delle tool window in title case. Solo token del tema, così skin e tema chiaro seguono.
+ */
+
+/*
+ * Colori base nel layer components: Tailwind 4 usa layer CSS nativi e le regole fuori layer
+ * batterebbero sempre le utility, così text-success o text-warning sui pulsanti non avrebbero effetto.
+ */
+@layer components {
+  .go-studio-icon-button { color: var(--color-text-3); }
+  .go-studio-widget { color: var(--color-text-2); }
+  .go-studio-stripe-button { color: var(--color-text-3); }
+}
+.go-studio-icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 6px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.go-studio-icon-button:hover:not(:disabled),
+.go-studio-icon-button.is-active {
+  background: var(--color-surface-3);
+  color: var(--color-text-1);
+}
+.go-studio-icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.go-studio-icon-button:focus-visible,
+.go-studio-widget:focus-visible,
+.go-studio-stripe-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* Widget della toolbar (progetto, branch, configurazione): testo leggibile, chevron discreto. */
+.go-studio-widget {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  min-width: 0;
+  padding: 0 9px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.go-studio-widget:hover:not(:disabled),
+.go-studio-widget.is-active {
+  background: var(--color-surface-3);
+  color: var(--color-text-1);
+}
+.go-studio-widget:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Gruppo Run: configurazione, Run, Debug e Stop come un unico controllo. */
+.go-studio-run-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 32px;
+  padding: 0 3px;
+  border-radius: 10px;
+  background: var(--gs-island);
+  box-shadow: inset 0 0 0 1px var(--color-border-1);
+}
+
+/* Barre laterali degli strumenti. */
+.go-studio-stripe {
+  display: flex;
+  width: 40px;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0 8px;
+}
+.go-studio-stripe-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.go-studio-stripe-button:hover {
+  background: var(--color-surface-3);
+  color: var(--color-text-1);
+}
+.go-studio-stripe-button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--color-accent) 20%, var(--gs-island));
+  color: var(--color-text-1);
+}
+.go-studio-stripe-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  border: 1.5px solid var(--gs-ground);
+}
+
+/* Intestazione delle tool window: nome in title case e azioni a destra. */
+.go-studio-tool-header {
+  display: flex;
+  height: 38px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px 0 14px;
+  font-size: 12.5px;
+}
+.go-studio-tool-title {
+  font-weight: 600;
+  color: var(--color-text-1);
+  white-space: nowrap;
+}
+
+/* Riga selezionata negli alberi (Project, Structure). */
+.go-studio-tree-row-selected {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent);
+  color: var(--color-text-1);
+}
+
+/* Tab dell'editor a pillola: la tab attiva è un blocco in rilievo. */
+.go-studio-tab {
+  position: relative;
+  display: flex;
+  height: 30px;
+  min-width: 0;
+  max-width: 15rem;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 11px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  color: var(--color-text-3);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.go-studio-tab:hover { background: var(--color-surface-2); color: var(--color-text-2); }
+.go-studio-tab[aria-selected='true'] {
+  background: var(--gs-raised);
+  color: var(--color-text-1);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+
+/* Separatori ridimensionabili tra le isole: sono lo spazio stesso tra i pannelli. */
+.go-studio-gap { background: transparent !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .go-studio-icon-button,
+  .go-studio-widget,
+  .go-studio-stripe-button,
+  .go-studio-tab { transition: none; }
+}
+
+/* Loghi dei marchi (Simple Icons): colore ufficiale se leggibile sul tema attivo, altrimenti il
+   colore del testo. I valori per tema li calcola brandColors() dal contrasto WCAG. */
+.go-studio-brand-icon { fill: var(--brand-on-light); }
+html.dark .go-studio-brand-icon { fill: var(--brand-on-dark); }
