@@ -153,9 +153,25 @@ type RunConfiguration struct {
 	BuildTags        []string             `json:"buildTags"`
 	Environment      []EnvironmentEntry   `json:"environment"`
 	Docker           DockerOptions        `json:"docker"`
-	Order            int                  `json:"order"`
-	CreatedAt        time.Time            `json:"createdAt"`
-	UpdatedAt        time.Time            `json:"updatedAt"`
+	// EnvFile è un file .env relativo alla working directory; le variabili esplicite vincono.
+	EnvFile string `json:"envFile,omitempty"`
+	GOOS    string `json:"goos,omitempty"`
+	GOARCH  string `json:"goarch,omitempty"`
+	Race    bool   `json:"race,omitempty"`
+	// Coverage aggiunge -cover; per run e build i dati finiscono in .gocoverdata.
+	Coverage bool `json:"coverage,omitempty"`
+	// Profile vale solo per i test: cpu, mem, block, mutex o trace.
+	Profile string `json:"profile,omitempty"`
+	// DebugFlags sono build flag aggiuntivi per Delve, es. -gcflags=all=-N -l.
+	DebugFlags []string `json:"debugFlags,omitempty"`
+	// Port imposta PORT e viene verificata libera prima dell'avvio.
+	Port int `json:"port,omitempty"`
+	// PreRun e PostRun sono ID di altre configurazioni della sessione, eseguite in ordine.
+	PreRun    []string  `json:"preRun,omitempty"`
+	PostRun   []string  `json:"postRun,omitempty"`
+	Order     int       `json:"order"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // RequiredSecrets elenca le chiavi il cui valore deve essere fornito a runtime.
@@ -190,7 +206,10 @@ type SessionView struct {
 	Navigation      []NavigationEntry `json:"navigation,omitempty"`
 	NavigationIndex int               `json:"navigationIndex,omitempty"`
 	// Breakpoints è gestito solo dal backend (SetBreakpoints): SaveSessionView lo conserva.
-	Breakpoints map[string][]int `json:"breakpoints,omitempty"`
+	Breakpoints map[string][]Breakpoint `json:"breakpoints,omitempty"`
+	// FunctionBreakpoints e StopOnPanic sono gestiti dal backend (SetFunctionBreakpoints).
+	FunctionBreakpoints []FunctionBreakpoint `json:"functionBreakpoints,omitempty"`
+	StopOnPanic         bool                 `json:"stopOnPanic,omitempty"`
 }
 
 // Bookmark è un segnalibro di riga del progetto.
@@ -263,7 +282,9 @@ type CreateProjectRequest struct {
 	ParentPath string `json:"parentPath"`
 	Name       string `json:"name"`
 	ModulePath string `json:"modulePath"`
-	Confirmed  bool   `json:"confirmed"`
+	// Template è l'ID di un ProjectTemplate; vuoto equivale al modulo vuoto.
+	Template  string `json:"template,omitempty"`
+	Confirmed bool   `json:"confirmed"`
 }
 
 type EventEnvelope struct {

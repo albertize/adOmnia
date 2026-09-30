@@ -43,6 +43,7 @@ type Service struct {
 	saveMu           sync.Mutex
 	recentMu         sync.RWMutex
 	recent           []RecentProject
+	trusted          []string // protetto da recentMu
 	runMu            sync.RWMutex
 	runRequests      map[RunID]RunRequest
 	eventMu          sync.RWMutex
@@ -135,6 +136,11 @@ func (s *Service) OpenProject(path string) (Session, error) {
 		return Session{}, err
 	}
 	s.rememberProject(session.Project, session.UpdatedAt)
+	if session.Project.Authorization != AuthorizationPermitted && s.isTrusted(session.Project.RealPath) {
+		if session, err = s.workspace.SetToolAuthorization(session.ID, true); err != nil {
+			return Session{}, err
+		}
+	}
 	if err := s.saveState(); err != nil {
 		return Session{}, err
 	}
@@ -143,35 +149,42 @@ func (s *Service) OpenProject(path string) (Session, error) {
 	return session, nil
 }
 
-// CreateProject crea una cartella e inizializza il modulo soltanto dopo conferma esplicita.
-func (s *Service) CreateProject(request CreateProjectRequest) (Session, error) {
+// CreateProject crea una cartella, inizializza il modulo e applica il template scelto
+// soltanto dopo conferma esplicita. Se un passo fallisce la cartella appena creata viene rimossa.
+func (s *Service) CreateProject(request CreateProjectRequest) (CreateProjectResult, error) {
 	if !request.Confirmed {
-		return Session{}, fmt.Errorf("conferma esplicita richiesta prima di eseguire go mod init")
+		return CreateProjectResult{}, fmt.Errorf("conferma esplicita richiesta prima di eseguire go mod init")
 	}
 	modulePath := strings.TrimSpace(request.ModulePath)
 	if !modulePathPattern.MatchString(modulePath) || strings.Contains(modulePath, "//") {
-		return Session{}, fmt.Errorf("module path non valido")
+		return CreateProjectResult{}, fmt.Errorf("module path non valido")
+	}
+	if _, _, err := resolveProjectTemplate(request.Template); err != nil {
+		return CreateProjectResult{}, err
 	}
 	target, err := s.workspace.CreateProjectDirectory(request.ParentPath, request.Name)
 	if err != nil {
-		return Session{}, err
+		return CreateProjectResult{}, err
 	}
 	binary, err := exec.LookPath("go")
 	if err != nil {
 		_ = os.Remove(target)
-		return Session{}, errors.New("go non trovato: installalo o configura il PATH prima di creare un modulo")
+		return CreateProjectResult{}, errors.New("go non trovato: installalo o configura il PATH prima di creare un modulo")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	command := exec.CommandContext(ctx, binary, "mod", "init", modulePath)
-	command.Dir = target
-	configureProcess(command, false)
-	output, runErr := command.CombinedOutput()
-	if runErr != nil {
-		_ = os.Remove(target)
-		return Session{}, fmt.Errorf("go mod init fallito: %s", strings.TrimSpace(string(output)))
+	if err := runGoCommand(binary, target, 20*time.Second, "mod", "init", modulePath); err != nil {
+		_ = os.RemoveAll(target)
+		return CreateProjectResult{}, fmt.Errorf("go mod init fallito: %w", err)
 	}
-	return s.OpenProject(target)
+	warning, err := applyProjectTemplate(binary, target, modulePath, strings.TrimSpace(request.Name), request.Template)
+	if err != nil {
+		_ = os.RemoveAll(target)
+		return CreateProjectResult{}, err
+	}
+	session, err := s.OpenProject(target)
+	if err != nil {
+		return CreateProjectResult{}, err
+	}
+	return CreateProjectResult{Session: session, Warning: warning}, nil
 }
 
 // ListSessions restituisce le sessioni ripristinate e attualmente aperte.
@@ -244,6 +257,7 @@ func (s *Service) SetToolAuthorization(id string, allowed bool) (Session, error)
 		s.processes.StopSession(session.ID)
 		s.lsp.Stop(session.ID)
 	}
+	s.setTrusted(session.Project.RealPath, allowed)
 	if err := s.saveState(); err != nil {
 		return Session{}, err
 	}
@@ -383,7 +397,38 @@ func (s *Service) ConfigureToolchain(sessionID string, config ToolchainConfigura
 	if _, err := s.session(sessionID); err != nil {
 		return err
 	}
-	return s.toolchain.Configure(SessionID(sessionID), config)
+	if err := s.toolchain.Configure(SessionID(sessionID), config); err != nil {
+		return err
+	}
+	return s.saveState()
+}
+
+// ToolchainSettings restituisce la configurazione del progetto e quella globale per l'editor della toolchain.
+func (s *Service) ToolchainSettings(sessionID string) (ToolchainSettings, error) {
+	if _, err := s.session(sessionID); err != nil {
+		return ToolchainSettings{}, err
+	}
+	return s.toolchain.Settings(SessionID(sessionID)), nil
+}
+
+// ConfigureGlobalToolchain imposta la toolchain predefinita dei progetti senza configurazione propria.
+func (s *Service) ConfigureGlobalToolchain(config ToolchainConfiguration) error {
+	if err := s.restore(); err != nil {
+		return err
+	}
+	if err := s.toolchain.ConfigureGlobal(config); err != nil {
+		return err
+	}
+	return s.saveState()
+}
+
+// UseGlobalToolchain elimina la configurazione del progetto: la sessione torna alla toolchain globale.
+func (s *Service) UseGlobalToolchain(sessionID string) error {
+	if _, err := s.session(sessionID); err != nil {
+		return err
+	}
+	s.toolchain.ResetSession(SessionID(sessionID))
+	return s.saveState()
 }
 
 // ListToolchainReleases legge su richiesta le versioni ufficiali compatibili con la piattaforma.
@@ -471,7 +516,10 @@ func (s *Service) configureInstalledToolchain(sessionID SessionID, binary string
 	}
 	config.Environment["GOROOT"] = filepath.Dir(filepath.Dir(binary))
 	config.Environment["GOTOOLCHAIN"] = "local"
-	return s.toolchain.Configure(sessionID, config)
+	if err := s.toolchain.Configure(sessionID, config); err != nil {
+		return err
+	}
+	return s.saveState()
 }
 
 // RemoveInstalledToolchain elimina una versione non in uso dopo conferma esplicita.
@@ -797,8 +845,14 @@ func (s *Service) restore() error {
 	}
 	s.recentMu.Lock()
 	s.recent = slices.Clone(state.Recent)
+	s.trusted = slices.Clone(state.TrustedPaths)
 	s.recentMu.Unlock()
 	s.runConfigs.Replace(state.RunConfigs)
+	globalToolchain := ToolchainConfiguration{}
+	if state.GlobalToolchain != nil {
+		globalToolchain = *state.GlobalToolchain
+	}
+	s.toolchain.Replace(state.Toolchains, globalToolchain)
 	views := maps.Clone(state.SessionUI)
 	if views == nil {
 		views = make(map[SessionID]SessionView)
@@ -818,19 +872,40 @@ func (s *Service) saveState() error {
 	defer s.saveMu.Unlock()
 	s.recentMu.RLock()
 	recent := slices.Clone(s.recent)
+	trusted := slices.Clone(s.trusted)
 	s.recentMu.RUnlock()
 	s.viewMu.RLock()
 	views := maps.Clone(s.views)
 	s.viewMu.RUnlock()
 	workspaces, activeWorkspace := s.studioWorkspaces.snapshot()
+	toolchains, globalToolchain := s.toolchain.Snapshot()
 	return s.persistence.SaveState(persistedState{
+		Toolchains:      toolchains,
+		GlobalToolchain: &globalToolchain,
 		Sessions:        s.workspace.ListSessions(),
 		Recent:          recent,
 		RunConfigs:      s.runConfigs.Snapshot(),
 		SessionUI:       views,
 		Workspaces:      workspaces,
 		ActiveWorkspace: activeWorkspace,
+		TrustedPaths:    trusted,
 	})
+}
+
+func (s *Service) isTrusted(realPath string) bool {
+	s.recentMu.RLock()
+	defer s.recentMu.RUnlock()
+	return slices.ContainsFunc(s.trusted, func(path string) bool { return samePath(path, realPath) })
+}
+
+// setTrusted ricorda (o dimentica) il consenso per la cartella, così vale anche alle riaperture.
+func (s *Service) setTrusted(realPath string, allowed bool) {
+	s.recentMu.Lock()
+	defer s.recentMu.Unlock()
+	s.trusted = slices.DeleteFunc(slices.Clone(s.trusted), func(path string) bool { return samePath(path, realPath) })
+	if allowed {
+		s.trusted = append(s.trusted, realPath)
+	}
 }
 
 func (s *Service) rememberProject(project Project, openedAt time.Time) {

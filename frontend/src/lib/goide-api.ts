@@ -7,6 +7,8 @@ import type {
   GoToolPreview,
   Capabilities,
   CreateProjectRequest,
+  CreateProjectResult,
+  ProjectTemplateList,
   DocumentDiskState,
   Execution,
   DependencyActionRequest,
@@ -19,6 +21,7 @@ import type {
   Session,
   ToolchainConfiguration,
   ToolchainInfo,
+  ToolchainSettings,
   ToolchainInstallation,
   ToolchainRelease,
   InstalledToolchain,
@@ -28,6 +31,7 @@ import type {
   RecoveredBuffer,
   TerminalSession,
   TerminalRequest,
+  TerminalProfile,
 } from '../../bindings/adomnia/internal/goide/models'
 
 export type GoIDECapabilities = Capabilities
@@ -39,6 +43,7 @@ export type GoIDEDocumentDiskState = DocumentDiskState
 export type GoIDEQuickOpenResult = QuickOpenResult
 export type GoIDEToolchainInfo = ToolchainInfo
 export type GoIDEToolchainConfiguration = ToolchainConfiguration
+export type GoIDEToolchainSettings = ToolchainSettings
 export type GoIDERunRequest = RunRequest
 export type GoIDEExecution = Execution
 export type GoIDEDependencyActionRequest = DependencyActionRequest
@@ -101,8 +106,14 @@ export async function chooseGoIDEProjectParent(): Promise<string> {
   return GoIDEBindings.SelectProjectParent()
 }
 
-export async function createGoIDEProject(request: CreateProjectRequest): Promise<GoIDESession> {
+export type GoIDEProjectTemplateList = ProjectTemplateList
+
+export async function createGoIDEProject(request: CreateProjectRequest): Promise<CreateProjectResult> {
   return GoIDEBindings.CreateProject(request)
+}
+
+export async function listGoIDEProjectTemplates(): Promise<ProjectTemplateList> {
+  return GoIDEBindings.ListProjectTemplates()
 }
 
 export async function setGoIDEToolAuthorization(sessionId: string, allowed: boolean): Promise<GoIDESession> {
@@ -148,6 +159,18 @@ export async function detectGoIDEToolchain(sessionId: string): Promise<GoIDETool
 
 export async function configureGoIDEToolchain(sessionId: string, config: ToolchainConfiguration): Promise<void> {
   await GoIDEBindings.ConfigureToolchain(sessionId, config)
+}
+
+export async function getGoIDEToolchainSettings(sessionId: string): Promise<GoIDEToolchainSettings> {
+  return GoIDEBindings.ToolchainSettings(sessionId)
+}
+
+export async function configureGoIDEGlobalToolchain(config: ToolchainConfiguration): Promise<void> {
+  await GoIDEBindings.ConfigureGlobalToolchain(config)
+}
+
+export async function resetGoIDEToolchainToGlobal(sessionId: string): Promise<void> {
+  await GoIDEBindings.UseGlobalToolchain(sessionId)
 }
 
 export async function listGoIDEToolchainReleases(sessionId: string): Promise<ToolchainRelease[]> {
@@ -289,7 +312,17 @@ export async function startGoIDEConfiguredRun(sessionId: string, configId: strin
   return GoIDEBindings.StartConfiguredRun(sessionId, configId, secrets)
 }
 
+export async function startGoIDEConfiguredBuild(sessionId: string, configId: string): Promise<GoIDEExecution> {
+  return GoIDEBindings.StartConfiguredBuild(sessionId, configId)
+}
+
 // --- Terminale PTY ----------------------------------------------------------
+
+export type GoIDETerminalProfile = TerminalProfile
+
+export async function listGoIDETerminalProfiles(): Promise<GoIDETerminalProfile[]> {
+  return GoIDEBindings.ListTerminalProfiles()
+}
 
 export async function openGoIDETerminal(request: GoIDETerminalRequest): Promise<GoIDETerminalSession> {
   return GoIDEBindings.OpenTerminal(request)
@@ -352,4 +385,26 @@ export async function detectGoIDEMake(sessionId: string) {
 
 export async function configureGoIDEMake(sessionId: string, binary: string): Promise<void> {
   return GoIDEBindings.ConfigureMake(sessionId, binary)
+}
+
+// --- Operazioni sui file del Project tree ---------------------------------------
+
+export async function createGoIDEDirectory(sessionId: string, relativePath: string): Promise<void> {
+  return GoIDEBindings.CreateDirectory(sessionId, relativePath)
+}
+
+export async function moveGoIDEPath(sessionId: string, from: string, to: string): Promise<void> {
+  return GoIDEBindings.MovePath(sessionId, from, to)
+}
+
+export async function duplicateGoIDEPath(sessionId: string, from: string, to: string): Promise<void> {
+  return GoIDEBindings.DuplicatePath(sessionId, from, to)
+}
+
+export async function deleteGoIDEPath(sessionId: string, relativePath: string): Promise<void> {
+  return GoIDEBindings.DeletePath(sessionId, relativePath)
+}
+
+export async function revealGoIDEPath(sessionId: string, relativePath: string): Promise<void> {
+  return GoIDEBindings.RevealPath(sessionId, relativePath)
 }

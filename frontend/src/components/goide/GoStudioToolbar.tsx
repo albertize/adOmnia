@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { FolderGit2, FolderOpen, FolderPlus, FolderX, History, PackageCheck, PackageSearch, RefreshCw, Settings2, Terminal } from 'lucide-react'
-import { Bug, ChevronDown, Hammer, LockKeyhole, Maximize2, Minimize2, MoreVertical, Play, Search, Square, X } from 'lucide-react'
+import { FolderGit2, GitBranch, FolderOpen, FolderPlus, FolderX, History, PackageCheck, PackageSearch, RefreshCw, Settings2, Terminal } from 'lucide-react'
+import { Bug, ChevronDown, Hammer, Maximize2, Minimize2, MoreVertical, Play, Search, Square, X } from 'lucide-react'
 import { ContextMenu, type ContextMenuItem } from '@/components/ui/ContextMenu'
 import type { GoIDEExecution, GoIDERunConfiguration, GoIDESession, GoIDEToolchainInfo, GoIDERecentProject } from '@/lib/goide-api'
 import { GoGopherIcon } from './GoGopherIcon'
+import { useGoStudioTitlebar, GoStudioWindowControls } from './GoStudioTitlebar'
 
 interface GoStudioToolbarProps {
   sessions: GoIDESession[]
@@ -26,7 +27,7 @@ interface GoStudioToolbarProps {
   onSelect: (sessionId: string) => void
   onOpenProject: () => void
   onCreateProject: () => void
-  onSetAuthorization: (allowed: boolean) => void
+  onClone: () => void
   onDetectToolchain: () => void
   onToolchainSettings: () => void
   onDependencies: () => void
@@ -85,14 +86,19 @@ export function GoStudioToolbar(props: GoStudioToolbarProps) {
     setMenu({ kind, x: rect.left, y: rect.bottom + 4 })
   }
 
-  const recentItems = (): ContextMenuItem[] => (props.recentProjects ?? []).slice(0, MAX_RECENT_IN_MENU).map((project, index) => ({
-    id: `${RECENT_PREFIX}${project.rootPath}`,
-    label: `${project.name} · ${project.rootPath}`,
-    icon: History,
-    disabled: !project.available,
-    disabledReason: 'Folder no longer available',
-    separatorBefore: index === 0,
-  }))
+  // Sempre visibile, come nel widget progetto di JetBrains: vuota resta una voce disabilitata, non sparisce.
+  const recentItems = (): ContextMenuItem[] => {
+    const recent = (props.recentProjects ?? []).slice(0, MAX_RECENT_IN_MENU)
+    if (recent.length === 0) return [{ id: 'recent-empty', label: 'Recent Projects', icon: History, disabled: true, disabledReason: 'No other recent projects yet', separatorBefore: true }]
+    return recent.map((project, index) => ({
+      id: `${RECENT_PREFIX}${project.rootPath}`,
+      label: `${project.name} · ${project.rootPath}`,
+      icon: History,
+      disabled: !project.available,
+      disabledReason: 'Folder no longer available',
+      separatorBefore: index === 0,
+    }))
+  }
 
   const menuItems = (kind: ToolbarMenu): ContextMenuItem[] => {
     if (kind === 'project') return [
@@ -100,6 +106,7 @@ export function GoStudioToolbar(props: GoStudioToolbarProps) {
       ...recentItems(),
       { id: 'open', label: 'Open Project…', shortcut: 'Ctrl+O', icon: FolderOpen, separatorBefore: true },
       { id: 'new', label: 'New Go Project…', icon: FolderPlus },
+      { id: 'clone', label: 'Clone Repository…', icon: GitBranch },
       { id: 'close', label: `Close “${activeSession.project.name}”`, icon: FolderX, separatorBefore: true },
     ]
     if (kind === 'config') return [
@@ -123,6 +130,7 @@ export function GoStudioToolbar(props: GoStudioToolbarProps) {
     switch (id) {
       case 'open': return props.onOpenProject()
       case 'new': return props.onCreateProject()
+      case 'clone': return props.onClone()
       case 'close': return props.onClose()
       case 'configure': return props.onConfigure()
       case 'detect': return props.onDetectToolchain()
@@ -132,8 +140,9 @@ export function GoStudioToolbar(props: GoStudioToolbarProps) {
     }
   }
 
+  const titlebar = useGoStudioTitlebar()
   return (
-    <div role="toolbar" aria-label="Go Studio toolbar" className="flex h-12 shrink-0 items-center gap-1 px-2">
+    <div role="toolbar" aria-label="Go Studio toolbar" {...titlebar.props} className={`flex h-12 shrink-0 items-center gap-1 pl-2 ${titlebar.active ? 'go-studio-titlebar' : 'pr-2'}`}>
       {mainMenu}
       <button type="button" aria-haspopup="menu" aria-expanded={menu?.kind === 'project'} disabled={loading} onClick={(event) => openMenu('project', event.currentTarget)} title={activeSession.project.rootPath} className={`go-studio-widget ml-1 max-w-60 ${menu?.kind === 'project' ? 'is-active' : ''}`}>
         <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-accent/20 text-[9.5px] font-bold text-accent">{projectInitials(activeSession.project.name)}</span>
@@ -141,11 +150,6 @@ export function GoStudioToolbar(props: GoStudioToolbarProps) {
         <ChevronDown size={12} className="shrink-0 text-text-4" />
       </button>
       {extra}
-      {!authorized && (
-        <button type="button" onClick={() => props.onSetAuthorization(true)} disabled={loading} title="Local Go tools are blocked for this folder. Click to trust it; nothing starts automatically." className="go-studio-widget text-warning">
-          <LockKeyhole size={13} /> Restricted
-        </button>
-      )}
 
       <div className="flex min-w-0 flex-1 justify-center px-3">
         <button type="button" onClick={props.onSearchEverywhere} title="Search Everywhere · Shift Shift" className="flex h-8 w-full max-w-[400px] items-center gap-2.5 rounded-[10px] border border-border-1 bg-[var(--gs-island)] px-3 text-text-4 transition-colors hover:border-border-2 hover:text-text-2">
@@ -174,7 +178,9 @@ export function GoStudioToolbar(props: GoStudioToolbarProps) {
           {props.maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
         </button>
       )}
-      <button type="button" onClick={props.onClose} disabled={loading} aria-label="Close project" title="Close project session" className="go-studio-icon-button h-8 w-8"><X size={14} /></button>
+      {/* Nella barra della finestra la X è quella della finestra: Close Project resta nel menu File. */}
+      {!titlebar.active && <button type="button" onClick={props.onClose} disabled={loading} aria-label="Close project" title="Close project session" className="go-studio-icon-button h-8 w-8"><X size={14} /></button>}
+      <GoStudioWindowControls />
       {menu && <ContextMenu appearance="studio" x={menu.x} y={menu.y} items={menuItems(menu.kind)} onSelect={select} onClose={() => setMenu(null)} />}
     </div>
   )

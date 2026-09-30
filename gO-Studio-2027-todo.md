@@ -6,6 +6,23 @@
 >
 > **Principio chiave:** **From code to runtime, everything is connected.**
 
+## Stato di avanzamento (aggiornato 2026-09-30)
+
+**Regola di lavoro:** una sezione alla volta, in ordine; ogni voce si spunta solo se verificata nel codice (con la prova accanto, in corsivo). Le voci non fatte restano aperte con il motivo o la sezione che le implementerà. Push a ogni sezione chiusa.
+
+| Sezioni | Stato |
+| --- | --- |
+| §0 Obiettivi, §1 Priorità | Verificate nel codice: 20 voci spuntate, le altre mappate sulle sezioni operative. |
+| §2 Editor Core | **77/80.** Aperte: Merge editor (→ §22), Move symbol e Change signature (limiti di gopls). |
+| §3 gopls Integration | **27/28.** Aperta: misura su repository grandi (→ §4 monorepo). |
+| §4 Workspace e Project Model | **45/48.** Fatti: Clone, go.work visuale, decorazioni Git/problemi/test nel Project, icon pack, template di progetto integrati e personalizzati. Aperti: grafo dei moduli (→ §19), Project graph (→ §15), misura su monorepo. |
+| §7 Debugger Delve | **30/44.** Fatti: breakpoint condizionali, hit count, logpoint, function breakpoint, stop on panic, Run to Cursor, dialog View Breakpoints. Aperti: set next statement (Delve non lo supporta), registri, memory e disassembly view, creation stack delle goroutine, viewer Go-specific (panic, defer, slice, map, channel, context, error chain). **Prossimo passo §7:** i viewer Go-specific. |
+| §5–§30 | Da verificare voce per voce: molte funzioni esistono già (Run configuration, Delve, Concurrency view e race detector, test runner, terminale, Git, integrazioni Docker/DB/Broker/API) ma non sono ancora spuntate. Lavoro: audit + lacune reali. |
+| §31–§43 | Sottosistemi nuovi e grandi (Distributed Request Debugger, Runtime-Aware AI, Semantic Graph, Service Map, Reproduction, Logs/Trace Studio): ognuno va progettato prima di essere implementato. |
+| §44–§61 | Checklist di qualità, Definition of Done, KPI, roadmap, posizionamento e idee: si spuntano man mano che le funzioni arrivano, non si implementano da sole. |
+
+**Da verificare a mano nell'app** (non coperto dai test automatici): Docker Build & Run, `docker compose up`/Stop con Docker Desktop acceso; un giro completo in `wails3 task dev` delle funzioni di §2–§4.
+
 ---
 
 # 0. Obiettivi di prodotto
@@ -17,8 +34,8 @@
 - [x] Deve trattare Go come linguaggio di prima classe, non come semplice editor syntax-highlighted. — *gopls, Delve, test runner strutturato, coverage, Go SDK per progetto.*
 - [x] Deve sfruttare `gopls` invece di duplicarne le funzionalità. — *completion, navigazione, rename, code action, semantic token, inlay hint e diagnostica vengono da gopls.*
 - [x] Deve usare Delve/DAP per il debugging reale. — *`internal/goide/dap`: launch, attach e remote.*
-- [ ] Deve usare i tool ufficiali Go quando possibile: `go test`, `go vet`, `go list`, `go tool`, `pprof`, `trace`, `govulncheck`, race detector. — *integrati `go test`, `go vet`, `go generate`, `go fix`, `go mod why/graph`, `go doc`; mancano race UX → §9, `pprof`/`trace` → §13, `govulncheck` → §20.*
-- [ ] Deve rendere visuali dati che oggi finiscono quasi sempre nel terminale. — *test tree e coverage sì; concurrency, profiler, benchmark → §8, §12, §13.*
+- [ ] Deve usare i tool ufficiali Go quando possibile: `go test`, `go vet`, `go list`, `go tool`, `pprof`, `trace`, `govulncheck`, race detector. — *integrati `go test`, `go vet`, `go generate`, `go fix`, `go mod why/graph`, `go doc`; race detector integrato (v0.9.41, §9); mancano `pprof`/`trace` → §13, `govulncheck` → §20.*
+- [ ] Deve rendere visuali dati che oggi finiscono quasi sempre nel terminale. — *test tree, coverage, goroutine e race sì (§8, §9); profiler e benchmark → §12, §13.*
 - [ ] Deve collegare automaticamente codice ↔ API ↔ DB ↔ broker ↔ runtime. — *Developer Context collega codice ↔ API/DB/broker (v0.9.39); runtime → §14.*
 - [ ] Deve avere una UX coerente con il resto di adOmnia. — *token condivisi, menu e dialog moderni (v0.9.40); resta la verifica visiva manuale.*
 - [x] Deve poter essere usato senza account.
@@ -50,7 +67,7 @@
 
 > Ogni voce ha la sua sezione operativa più sotto (§8–§21): si spunta lì, poi qui.
 
-- [ ] Concurrency view.
+- [ ] Concurrency view. — *§8 31/37 e §9 10/12 (v0.9.41 + P1): restano lock ordering, context non cancellato, timer, worker pool, badge STATIC, salvataggio race, test di regressione.*
 - [ ] Profiler integrato.
 - [ ] Benchmark explorer.
 - [ ] Fuzzing UX.
@@ -63,16 +80,16 @@
 
 ## P2 — Differenziazione adOmnia
 
-- [ ] Code → REST.
-- [ ] Code → gRPC.
-- [ ] Code → Kafka.
-- [ ] Code → DB.
-- [ ] Code → WebSocket.
-- [ ] Distributed Request Debugger.
-- [ ] Service Map runtime-aware.
-- [ ] Reproduction Studio.
-- [ ] Cross-service debugging.
-- [ ] Unified local environment.
+- [x] Code → REST. — *CodeLens "Open GET /x in API Client" su ogni route (net/http, gin, echo, fiber, chi, gorilla); dalla Command Palette anche Add to Mock Server e Go to handler.*
+- [x] Code → gRPC. — *`RegisterXServer(s, impl)` rilevato in `internal/devcontext`; CodeLens "Call in gRPC client" apre il client gRPC e lancia la reflection sull'indirizzo di `net.Listen`.*
+- [x] Code → Kafka. — *topic letterali (sarama, franz-go, kafka-go, AMQP, NATS) con CodeLens "Open in Broker Studio".*
+- [x] Code → DB. — *tabelle nelle query SQL letterali con CodeLens "Query in Database".*
+- [x] Code → WebSocket. — *Upgrade (gorilla) / Accept (nhooyr, coder) collegati alla route del loro handler e Dial con URL `ws://`; CodeLens "Open in WebSocket client".*
+- [ ] Distributed Request Debugger. — *sottosistema nuovo (§32): va progettato prima.*
+- [ ] Service Map runtime-aware. — *§31: va progettato prima.*
+- [ ] Reproduction Studio. — *§33: va progettato prima.*
+- [ ] Cross-service debugging. — *dipende dal Distributed Request Debugger (§32).*
+- [ ] Unified local environment. — *oggi Docker Lab + servizi del progetto (Project Services); manca la vista unica: da progettare con la Service Map.*
 
 ## P3 — Funzioni “2027”
 
@@ -137,80 +154,80 @@
 
 ## Navigazione codice
 
-- [ ] Go to definition.
-- [ ] Go to declaration.
-- [ ] Go to type definition.
-- [ ] Go to implementation.
-- [ ] Go to references.
-- [ ] Go to symbol.
-- [ ] Go to file.
-- [ ] Go to line.
-- [ ] Go to test.
-- [ ] Back/forward navigation.
-- [ ] Call hierarchy.
-- [ ] Type hierarchy.
-- [ ] Implementations tree.
-- [ ] File structure.
-- [ ] Workspace symbols.
-- [ ] Recent locations.
-- [ ] Jump to last edit.
-- [ ] Navigate errors.
+- [x] Go to definition. — *Ctrl+B / Ctrl+clic.*
+- [x] Go to declaration.
+- [x] Go to type definition.
+- [x] Go to implementation. — *Ctrl+Alt+B.*
+- [x] Go to references. — *Find Usages (Alt+F7) e Show Usages.*
+- [x] Go to symbol.
+- [x] Go to file. — *Ctrl+P.*
+- [x] Go to line. — *Ctrl+G.*
+- [x] Go to test. — *Alt+Shift+T: file ↔ `_test.go` e funzione ↔ test; se manca, lo genera gopls.*
+- [x] Back/forward navigation.
+- [x] Call hierarchy. — *Ctrl+Alt+H: chiamanti/chiamati espandibili, ricorsione marcata (test con gopls reale).*
+- [x] Type hierarchy. — *Navigate → Type Hierarchy: supertipi/sottotipi (test con gopls reale).*
+- [x] Implementations tree. — *Type Hierarchy → Subtypes mostra l’albero degli implementatori.*
+- [x] File structure. — *Ctrl+F12.*
+- [x] Workspace symbols.
+- [x] Recent locations. — *Ctrl+Shift+E.*
+- [x] Jump to last edit. — *Ctrl+Shift+Backspace.*
+- [x] Navigate errors. — *F8 / Shift+F8.*
 
 ## Refactoring
 
-- [ ] Rename symbol.
-- [ ] Extract variable.
-- [ ] Extract constant.
-- [ ] Extract method/function.
-- [ ] Extract interface.
-- [ ] Inline variable.
-- [ ] Inline function quando sicuro.
-- [ ] Move symbol.
-- [ ] Change signature.
-- [ ] Implement interface.
-- [ ] Generate method stubs.
-- [ ] Generate constructor.
-- [ ] Generate getter/setter solo quando richiesto.
-- [ ] Generate tests.
-- [ ] Generate table-driven tests.
-- [ ] Generate benchmark.
-- [ ] Generate fuzz test.
-- [ ] Safe preview di ogni refactoring.
-- [ ] Multi-file refactoring preview.
-- [ ] Undo refactoring.
+- [x] Rename symbol. — *Shift+F6 con anteprima.*
+- [x] Extract variable.
+- [x] Extract constant.
+- [x] Extract method/function.
+- [x] Extract interface. — *Code → Generate… → Extract Interface (metodi esportati della struct).*
+- [x] Inline variable.
+- [x] Inline function quando sicuro. — *gopls `refactor.inline.call`.*
+- [ ] Move symbol. — *oggi Move to New File (gopls); spostare un simbolo in un altro package non è ancora supportato da gopls.*
+- [ ] Change signature. — *parziale: le riscritture di gopls (rimuovi parametro inutilizzato, sposta parametro) sono in Refactor This; manca un dialog completo.*
+- [x] Implement interface. — *Ctrl+I.*
+- [x] Generate method stubs. — *Implement Interface e la quick fix di gopls per i metodi mancanti.*
+- [x] Generate constructor. — *Code → Generate… (Alt+Insert).*
+- [x] Generate getter/setter solo quando richiesto. — *solo su richiesta e solo per i campi non esportati.*
+- [x] Generate tests. — *gopls “Add test” (test verificato con gopls reale).*
+- [x] Generate table-driven tests. — *il test di gopls è table-driven.*
+- [x] Generate benchmark. — *nel `_test.go`, compilato ed eseguito nei test.*
+- [x] Generate fuzz test. — *seed tipizzati per `f.Add`, compilato ed eseguito nei test.*
+- [x] Safe preview di ogni refactoring.
+- [x] Multi-file refactoring preview.
+- [x] Undo refactoring. — *Ctrl+Z; le modifiche multi-file passano dall’anteprima.*
 
 ---
 
 # 3. gopls Integration
 
-- [ ] Avvio automatico di `gopls`.
-- [ ] Auto-detection versione.
-- [ ] Download/install controllato.
-- [ ] Selezione versione `gopls`.
-- [ ] Health indicator.
-- [ ] Restart language server.
-- [ ] Log dedicato.
-- [ ] Diagnostics panel.
-- [ ] Semantic tokens.
-- [ ] Completion.
-- [ ] Signature help.
-- [ ] Hover docs.
-- [ ] References.
-- [ ] Implementations.
-- [ ] Call hierarchy.
-- [ ] Type hierarchy.
-- [ ] Rename.
-- [ ] Code actions.
-- [ ] Workspace symbols.
-- [ ] Inlay hints.
-- [ ] Vulnerability diagnostics dove disponibili.
-- [ ] Supporto multi-module.
-- [ ] Supporto `go.work`.
-- [ ] Gestione repository grandi.
-- [ ] Indexing incrementale.
-- [ ] Cache persistente.
-- [ ] Stato indexing visibile ma poco invasivo.
-- [ ] Nessun blocco UI durante indexing.
+- [x] Avvio automatico di `gopls`. — *parte da solo nei progetti autorizzati, salvo stop esplicito.*
+- [x] Auto-detection versione. — *Tool Paths / status bar mostrano binario e versione.*
+- [x] Download/install controllato. — *Go → Install gopls… con conferma, nella cartella strumenti di adOmnia.*
+- [x] Selezione versione `gopls`. — *Tool Paths accetta qualunque binario gopls.*
+- [x] Health indicator. — *status bar: pronto, in avvio, fermo, crash.*
+- [x] Restart language server.
+- [x] Log dedicato. — *Go → Language Server Log.*
+- [x] Diagnostics panel. — *Problems (Alt+6).*
+- [x] Semantic tokens.
+- [x] Completion.
+- [x] Signature help.
+- [x] Hover docs.
+- [x] References.
+- [x] Implementations.
+- [x] Call hierarchy.
+- [x] Type hierarchy.
+- [x] Rename.
+- [x] Code actions.
+- [x] Workspace symbols.
+- [x] Inlay hints.
+- [x] Vulnerability diagnostics dove disponibili. — *Code → Vulnerability Diagnostics: opt-in con conferma (scarica il DB da vuln.go.dev), `vulncheck: Imports`; impostazioni verificate con gopls reale.*
+- [x] Supporto multi-module.
+- [x] Supporto `go.work`.
+- [ ] Gestione repository grandi. — *gopls esclude `node_modules`; manca una misura su monorepo grandi → §4.*
+- [x] Indexing incrementale. — *di gopls; il buffer non salvato è sincronizzato a ogni modifica.*
+- [x] Cache persistente. — *cache su disco di gopls.*
+- [x] Stato indexing visibile ma poco invasivo. — *progresso di gopls nella status bar.*
+- [x] Nessun blocco UI durante indexing. — *tutte le richieste sono asincrone e cancellabili.*
 
 ---
 
@@ -218,86 +235,86 @@
 
 ## Workspace
 
-- [ ] Open folder.
-- [ ] Open repository.
-- [ ] Open recent.
-- [ ] Open multiple roots.
-- [ ] Import existing Go project.
-- [ ] Clone Git repository.
-- [ ] New Go project wizard.
-- [ ] New CLI project.
-- [ ] New REST service.
-- [ ] New gRPC service.
-- [ ] New worker.
-- [ ] New Kafka consumer/producer.
-- [ ] New library.
-- [ ] Project templates.
-- [ ] Custom templates.
+- [x] Open folder. — *File → Open Project (modulo, go.work o cartella).*
+- [x] Open repository. — *una cartella con Git mostra branch e modifiche.*
+- [x] Open recent. — *File → Open Recent e menu progetto nella toolbar.*
+- [x] Open multiple roots. — *più progetti aperti insieme nei workspace Go Studio.*
+- [x] Import existing Go project.
+- [x] Clone Git repository. — *File → Clone Repository…: solo https/ssh/git (URL con opzioni rifiutati), il progetto si apre senza trust.*
+- [x] New Go project wizard. — *New Go Project (go mod init con conferma); i template sono sotto.*
+- [x] New CLI project. — *template `cli`: flag, `run()` testabile, test.*
+- [x] New REST service. — *template `rest`: `net/http` con routing 1.22, JSON, graceful shutdown, test httptest.*
+- [x] New gRPC service. — *template `grpc`: health + reflection, `.proto` di esempio, `go mod tidy` su grpc v1.84.0 (stessa versione di adOmnia, funziona dalla module cache).*
+- [x] New worker. — *template `worker`: loop con ticker, `signal.NotifyContext`, test di cancellazione.*
+- [x] New Kafka consumer/producer. — *template `kafka`: `cmd/producer` e `cmd/consumer` (consumer group) su IBM/sarama.*
+- [x] New library. — *template `library`: package col nome ricavato dal module path, test ed Example.*
+- [x] Project templates. — *scelta del template nel dialog Create Go project; `TestBuiltinTemplatesBuildAndTest` crea ogni template ed esegue `go vet` + `go test`.*
+- [x] Custom templates. — *cartelle in `<config>/adomnia/go-templates/`; `__MODULE__`, `__NAME__`, `__PACKAGE__` sostituiti in contenuti e percorsi; `.git` e symlink ignorati, niente percorsi esterni.*
 
 ## Multi-module
 
-- [ ] Rilevamento automatico di tutti i `go.mod`.
-- [ ] Rilevamento `go.work`.
-- [ ] Creazione visuale `go.work`.
-- [ ] Aggiunta/rimozione module dal workspace.
-- [ ] Vista module dependency.
-- [ ] Supporto monorepo.
-- [ ] Supporto repository con `/cmd/*`.
-- [ ] Supporto repository con `/internal`.
-- [ ] Supporto repository con più microservizi.
-- [ ] Project graph.
+- [x] Rilevamento automatico di tutti i `go.mod`.
+- [x] Rilevamento `go.work`.
+- [x] Creazione visuale `go.work`. — *Go → Go Workspace (go.work)…: moduli con checkbox, `go work init` (test con go reale).*
+- [x] Aggiunta/rimozione module dal workspace. — *`go work use` / `go work edit -dropuse`, solo moduli rilevati nel progetto.*
+- [ ] Vista module dependency. — *le dipendenze di un modulo ci sono (Module Dependencies); il grafo tra moduli → §19.*
+- [ ] Supporto monorepo. — *funziona (multi-modulo, go.work); manca una misura delle prestazioni su monorepo grandi.*
+- [x] Supporto repository con `/cmd/*`. — *▶ su ogni `func main` e Run configuration per package.*
+- [x] Supporto repository con `/internal`.
+- [x] Supporto repository con più microservizi. — *più moduli e go.work nello stesso progetto.*
+- [ ] Project graph. — *→ §15 Architecture Explorer.*
 
 ## File explorer
 
-- [ ] Git decorations.
-- [ ] Diagnostics decorations.
-- [ ] Test status decorations.
-- [ ] File icon pack completo.
-- [ ] Go file.
-- [ ] Mod file.
-- [ ] Sum file.
-- [ ] Work file.
-- [ ] Proto.
-- [ ] YAML.
-- [ ] JSON.
-- [ ] XML.
-- [ ] SQL.
-- [ ] Dockerfile.
-- [ ] Makefile.
-- [ ] Markdown.
-- [ ] Env.
-- [ ] Shell.
-- [ ] PowerShell.
-- [ ] JavaScript/TypeScript.
-- [ ] Terraform.
-- [ ] Helm.
-- [ ] Kubernetes manifests.
+- [x] Git decorations. — *nome colorato come in JetBrains (modificato, aggiunto, non tracciato, conflitto), anche sulle cartelle.*
+- [x] Diagnostics decorations. — *sottolineatura rossa/ambra su file e cartelle che contengono errori o avvisi.*
+- [x] Test status decorations. — *pallino rosso sui file (e cartelle) con test falliti nell’ultima esecuzione.*
+- [x] File icon pack completo. — *marchi reali dove esistono, icone generiche dedicate altrove.*
+- [x] Go file.
+- [x] Mod file.
+- [x] Sum file.
+- [x] Work file.
+- [x] Proto. — *icona schema dedicata.*
+- [x] YAML.
+- [x] JSON.
+- [x] XML.
+- [x] SQL. — *icona database.*
+- [x] Dockerfile.
+- [x] Makefile.
+- [x] Markdown.
+- [x] Env.
+- [x] Shell.
+- [x] PowerShell. — *icona terminale (Simple Icons non ha il marchio).*
+- [x] JavaScript/TypeScript.
+- [x] Terraform.
+- [x] Helm.
+- [x] Kubernetes manifests. — *riconosciuti da nome (deployment, service, kustomization…) e cartella (k8s/, manifests/…).*
 
 ---
 
 # 5. Go Toolchain Manager
 
-- [ ] Rilevamento Go installato.
-- [ ] Visualizzazione `GOROOT`.
-- [ ] Visualizzazione `GOPATH`.
-- [ ] Gestione `GOPROXY`.
-- [ ] Gestione `GOPRIVATE`.
-- [ ] Gestione `GONOSUMDB`.
-- [ ] Gestione `GONOPROXY`.
-- [ ] Gestione CGO.
-- [ ] Build tags.
-- [ ] GOOS.
-- [ ] GOARCH.
-- [ ] Toolchain per progetto.
-- [ ] Toolchain globale.
-- [ ] Supporto più versioni Go.
-- [ ] Switch rapido toolchain.
-- [ ] Compatibilità `toolchain` directive.
-- [ ] Controllo versione minima richiesta.
-- [ ] Segnalazione mismatch.
-- [ ] Installazione tool utili.
-- [ ] Aggiornamento tool.
-- [ ] Tool health check.
+- [x] Rilevamento Go installato.
+- [x] Visualizzazione `GOROOT`.
+- [x] Visualizzazione `GOPATH`.
+- [x] Gestione `GOPROXY`.
+- [x] Gestione `GOPRIVATE`.
+- [x] Gestione `GONOSUMDB`.
+- [x] Gestione `GONOPROXY`.
+- [x] Gestione CGO.
+- [x] Build tags.
+- [x] GOOS.
+- [x] GOARCH.
+- [x] Toolchain per progetto.
+- [x] Toolchain globale.
+- [x] Supporto più versioni Go.
+- [x] Switch rapido toolchain.
+- [x] Compatibilità `toolchain` directive.
+- [x] Controllo versione minima richiesta.
+- [x] Segnalazione mismatch.
+- [x] Installazione tool utili.
+- [x] Aggiornamento tool.
+- [x] Tool health check.
 
 ## Tool support
 
@@ -331,22 +348,22 @@
 
 ## Parametri configurabili
 
-- [ ] Package.
-- [ ] Working directory.
-- [ ] Environment variables.
-- [ ] Env file.
-- [ ] Program arguments.
-- [ ] Build arguments.
-- [ ] Build tags.
-- [ ] GOOS.
-- [ ] GOARCH.
-- [ ] Race detector.
-- [ ] Coverage.
-- [ ] Profiling.
-- [ ] Debug flags.
-- [ ] Port.
-- [ ] Pre-run tasks.
-- [ ] Post-run tasks.
+- [x] Package.
+- [x] Working directory.
+- [x] Environment variables.
+- [x] Env file.
+- [x] Program arguments.
+- [x] Build arguments.
+- [x] Build tags.
+- [x] GOOS.
+- [x] GOARCH.
+- [x] Race detector.
+- [x] Coverage.
+- [x] Profiling.
+- [x] Debug flags.
+- [x] Port.
+- [x] Pre-run tasks.
+- [x] Post-run tasks.
 
 ## UX
 
@@ -368,44 +385,44 @@
 
 ## Base
 
-- [ ] Delve integrato.
-- [ ] DAP.
-- [ ] Breakpoint.
-- [ ] Conditional breakpoint.
-- [ ] Hit count breakpoint.
-- [ ] Logpoint.
-- [ ] Function breakpoint.
-- [ ] Exception/panic breakpoint.
-- [ ] Step over.
-- [ ] Step into.
-- [ ] Step out.
-- [ ] Continue.
-- [ ] Pause.
-- [ ] Restart.
-- [ ] Run to cursor.
-- [ ] Set next statement dove supportato.
-- [ ] Evaluate expression.
-- [ ] Watches.
-- [ ] Locals.
-- [ ] Globals.
+- [x] Delve integrato. — *`internal/goide/dap`, install Delve dal menu Go*
+- [x] DAP.
+- [x] Breakpoint. — *clic sul numero di riga, verificati da Delve*
+- [x] Conditional breakpoint. — *tasto destro sul numero di riga; Delve valuta la condizione; test con Delve reale*
+- [x] Hit count breakpoint. — *`3`, `>= 5`, `% 10`, validato come Delve*
+- [x] Logpoint. — *`{espressione}` nel messaggio, output nella Debug console, nessuna fermata (test)*
+- [x] Function breakpoint. — *View Breakpoints (Ctrl+Shift+F8), con condizione e hit count, verificati da Delve*
+- [x] Exception/panic breakpoint. — *"Stop on every panic" (anche recuperati) via `runtime.gopanic`; i panic non recuperati fermano sempre*
+- [x] Step over. — *F8, anche F6/F10*
+- [x] Step into. — *F7*
+- [x] Step out. — *Shift+F8*
+- [x] Continue. — *F9, anche F5*
+- [x] Pause.
+- [x] Restart. — *Rerun*
+- [x] Run to cursor. — *Alt+F9, breakpoint temporaneo tolto alla fermata successiva; errore chiaro su riga senza codice*
+- [ ] Set next statement dove supportato. — *non supportato da Delve via DAP (niente `goto`): resta aperto finché Delve non lo offre*
+- [x] Evaluate expression. — *console REPL e hover*
+- [x] Watches. — *persistenti per progetto*
+- [x] Locals.
+- [x] Globals. — *Delve `showGlobalVariables`*
 - [ ] Registers opzionali.
-- [ ] Call stack.
-- [ ] Threads/goroutines.
+- [x] Call stack. — *frame di libreria piegati*
+- [x] Threads/goroutines. — *vista Goroutines*
 - [ ] Memory view.
 - [ ] Disassembly view.
-- [ ] Debug console.
+- [x] Debug console.
 
 ## Go-specific
 
-- [ ] Goroutine selector.
-- [ ] Goroutine grouping.
-- [ ] Goroutine state.
-- [ ] Goroutine creation stack.
-- [ ] Goroutine filtering.
-- [ ] Show blocked goroutines.
-- [ ] Show sleeping goroutines.
-- [ ] Show goroutines waiting on channel.
-- [ ] Show goroutines waiting on mutex.
+- [x] Goroutine selector.
+- [x] Goroutine grouping. — *per package, funzione di avvio o stack identico*
+- [x] Goroutine state. — *dedotto dallo stack*
+- [ ] Goroutine creation stack. — *si mostra la funzione di avvio (Started in), non ancora lo stack dell'istruzione go*
+- [x] Goroutine filtering. — *All/Blocked/Running e ricerca*
+- [x] Show blocked goroutines.
+- [x] Show sleeping goroutines.
+- [x] Show goroutines waiting on channel. — *con l'espressione attesa*
+- [x] Show goroutines waiting on mutex.
 - [ ] Panic inspector.
 - [ ] Deferred call inspector.
 - [ ] Interface dynamic type viewer.
@@ -422,65 +439,65 @@
 
 ## Visualizzazione
 
-- [ ] Vista grafica goroutine.
-- [ ] Stato: RUNNING.
-- [ ] Stato: WAITING.
-- [ ] Stato: BLOCKED.
-- [ ] Stato: SLEEPING.
-- [ ] Stato: SYSCALL.
-- [ ] Raggruppamento per stack.
-- [ ] Raggruppamento per funzione di origine.
-- [ ] Raggruppamento per package.
-- [ ] Timeline goroutine.
-- [ ] Relazione goroutine → channel.
-- [ ] Relazione goroutine → mutex.
-- [ ] Relazione goroutine → waitgroup.
-- [ ] Relazione goroutine → context.
-- [ ] Relazione goroutine → network call.
-- [ ] Relazione goroutine → DB query.
+- [x] Vista grafica goroutine. — *flusso funzione di avvio → goroutine → risorse attese*
+- [x] Stato: RUNNING.
+- [x] Stato: WAITING.
+- [x] Stato: BLOCKED. — *chan receive/send, select, mutex, WaitGroup, cond*
+- [x] Stato: SLEEPING.
+- [x] Stato: SYSCALL. — *anche I/O wait*
+- [x] Raggruppamento per stack.
+- [x] Raggruppamento per funzione di origine.
+- [x] Raggruppamento per package.
+- [x] Timeline goroutine. — *goroutine per stato a ogni pausa*
+- [x] Relazione goroutine → channel.
+- [x] Relazione goroutine → mutex. — *e RWMutex*
+- [x] Relazione goroutine → waitgroup.
+- [x] Relazione goroutine → context. — *attesa su ctx.Done()*
+- [x] Relazione goroutine → network call. — *I/O wait, net/http, gRPC, Kafka*
+- [x] Relazione goroutine → DB query. — *database/sql, pgx, MySQL, SQLite, Mongo, Redis nello stack*
 
 ## Diagnostica
 
-- [ ] Possibile goroutine leak.
-- [ ] Channel senza consumer.
-- [ ] Channel senza producer.
-- [ ] Send potenzialmente bloccante.
-- [ ] Receive potenzialmente bloccante.
-- [ ] Mutex contention.
-- [ ] RWMutex contention.
+- [x] Possibile goroutine leak. — *10+ goroutine della stessa funzione ferme sulla stessa riga*
+- [x] Channel senza consumer. — *nell'istantanea: nessuno riceve dallo stesso canale*
+- [x] Channel senza producer.
+- [x] Send potenzialmente bloccante.
+- [x] Receive potenzialmente bloccante.
+- [x] Mutex contention.
+- [x] RWMutex contention.
 - [ ] Lock ordering sospetto.
-- [ ] Possibile deadlock.
-- [ ] WaitGroup misuse.
+- [x] Possibile deadlock. — *tutte le goroutine aspettano un'altra goroutine*
+- [ ] WaitGroup misuse. — *segnalato solo "WaitGroup never reaches zero" (nessuna goroutine attiva per Done)*
 - [ ] Context non cancellato.
 - [ ] Timer/ticker non stoppato.
 - [ ] Worker pool saturation.
-- [ ] Excessive goroutine count.
+- [x] Excessive goroutine count. — *1000+*
 
 ## Runtime confirmation
 
-- [ ] Distinguere issue statiche da issue osservate runtime.
-- [ ] Badge `STATIC`.
-- [ ] Badge `OBSERVED`.
-- [ ] Badge `CONFIRMED`.
-- [ ] Collegamento diretto allo stack.
-- [ ] Collegamento diretto alla riga di codice.
-- [ ] Snapshot esportabile.
+- [x] Distinguere issue statiche da issue osservate runtime.
+- [ ] Badge `STATIC`. — *il badge esiste; nessuna analisi statica di concorrenza ancora*
+- [x] Badge `OBSERVED`. — *diagnosi dall'istantanea in pausa*
+- [x] Badge `CONFIRMED`. — *race riportati dal runtime*
+- [x] Collegamento diretto allo stack.
+- [x] Collegamento diretto alla riga di codice.
+- [x] Snapshot esportabile. — *copia JSON di goroutine, diagnosi e race*
 
 ---
 
 # 9. Race Detector UX
 
-- [ ] Run with race.
-- [ ] Parsing output race detector.
-- [ ] Evidenziare entrambi gli accessi concorrenti.
-- [ ] Mostrare stack A.
-- [ ] Mostrare stack B.
-- [ ] Collegare alle righe sorgenti.
-- [ ] Mostrare goroutine coinvolte.
-- [ ] Mostrare ordine temporale quando disponibile.
-- [ ] Raggruppare race duplicate.
-- [ ] Salvare sessione race.
-- [ ] Confrontare run diverse.
+- [x] Run with race. — *Run with Race Detector e Test Current Package with Race Detector*
+- [x] Parsing output race detector. — *test, run e console di debug*
+- [x] Evidenziare entrambi gli accessi concorrenti.
+- [x] Mostrare stack A.
+- [x] Mostrare stack B.
+- [x] Collegare alle righe sorgenti.
+- [x] Mostrare goroutine coinvolte. — *con lo stack di creazione*
+- [x] Mostrare ordine temporale quando disponibile. — *EARLIER / LATER*
+- [x] Raggruppare race duplicate. — *conteggio delle ripetizioni*
+- [ ] Salvare sessione race. — *oggi solo copia JSON dello snapshot; nessuna persistenza tra riavvii*
+- [x] Confrontare run diverse. — *nuovo nell'ultima run, ricorrente, non più presente*
 - [ ] Generare test di regressione assistito.
 
 ---
@@ -948,7 +965,7 @@
 - [ ] Reflection.
 - [ ] Import proto.
 - [ ] Generate Go code.
-- [ ] Detect generated Go service.
+- [x] Detect generated Go service. — *registrazioni `RegisterXServer` (test `TestDetectGRPCRegistrationWithAddress`).*
 - [ ] Link proto method → Go handler.
 - [ ] Call method.
 - [ ] Debug method.
@@ -1043,8 +1060,8 @@
 
 # 28. WebSocket Integration
 
-- [ ] Detect WebSocket server.
-- [ ] Detect WebSocket client.
+- [x] Detect WebSocket server. — *`internal/devcontext/goprotocols.go`, test `TestDetectWebSocketServerLinkedToRouteAndClient`.*
+- [x] Detect WebSocket client.
 - [ ] Connection explorer.
 - [ ] Send message.
 - [ ] Receive messages.

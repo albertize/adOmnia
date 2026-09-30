@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { ArrowRightToLine, Columns2, Lock, Pin, RotateCcw, Rows2, SquareDashed, Trash2, X } from 'lucide-react'
 import { ContextMenu, type ContextMenuItem } from '@/components/ui/ContextMenu'
 import { useGoIDEStore, type GoIDEEditorDocument } from '@/stores/goide'
@@ -8,6 +8,8 @@ interface GoStudioEditorTabsProps {
   documents: GoIDEEditorDocument[]
   activeId: string
   onRequestClose: (documents: GoIDEEditorDocument[]) => void
+  /** Azioni fisse a destra della riga: restano visibili anche quando le tab scorrono. */
+  actions?: ReactNode
 }
 
 type TabAction = 'pin' | 'close' | 'closeOthers' | 'closeRight' | 'closeAll' | 'reopen' | 'splitRight' | 'splitDown'
@@ -42,13 +44,13 @@ export function documentsToClose(action: TabAction, ordered: GoIDEEditorDocument
   }
 }
 
-export function GoStudioEditorTabs({ documents, activeId, onRequestClose }: GoStudioEditorTabsProps) {
+export function GoStudioEditorTabs({ documents, activeId, onRequestClose, actions }: GoStudioEditorTabsProps) {
   const pinned = useGoIDEStore((state) => state.pinnedDocuments)
-  const previewId = useGoIDEStore((state) => (ordered[0] ? state.previewDocumentBySession[ordered[0].document.sessionId] ?? null : null))
   const hasClosed = useGoIDEStore((state) => (state.activeSessionId ? (state.closedDocuments[state.activeSessionId]?.length ?? 0) > 0 : false))
   const selectDocument = useGoIDEStore((state) => state.selectDocument)
   const [menu, setMenu] = useState<{ x: number; y: number; document: GoIDEEditorDocument } | null>(null)
   const ordered = useMemo(() => orderTabs(documents, pinned), [documents, pinned])
+  const previewId = useGoIDEStore((state) => (ordered[0] ? state.previewDocumentBySession[ordered[0].document.sessionId] ?? null : null))
   const qualifiers = useMemo(() => tabQualifiers(documents), [documents])
 
   const items = (target: GoIDEEditorDocument): ContextMenuItem[] => {
@@ -79,7 +81,8 @@ export function GoStudioEditorTabs({ documents, activeId, onRequestClose }: GoSt
   }
 
   return (
-    <div role="tablist" aria-label="Open files" className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto px-2">
+    <div className="flex h-10 shrink-0 items-stretch border-b border-border-1">
+    <div role="tablist" aria-label="Open files" className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-2">
       {ordered.map((item) => {
         const active = item.document.id === activeId
         const isPinned = !!pinned[item.document.id]
@@ -109,6 +112,8 @@ export function GoStudioEditorTabs({ documents, activeId, onRequestClose }: GoSt
         )
       })}
       {menu && <ContextMenu appearance="studio" x={menu.x} y={menu.y} items={items(menu.document)} onSelect={(id) => run(id as TabAction, menu.document)} onClose={() => setMenu(null)} />}
+    </div>
+    {actions}
     </div>
   )
 }

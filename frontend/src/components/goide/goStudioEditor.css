@@ -24,6 +24,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .go-studio-run-glyph::before { transition: none; }
+  .monaco-editor .go-studio-vcs { transition: none; }
   .go-studio-run-glyph:hover::before { transform: none; }
 }
 
@@ -78,6 +79,26 @@
   background: transparent;
   border: 2px solid var(--color-danger, #ef4444);
   box-sizing: border-box;
+}
+/* Condizione o hit count: "?" nel pallino. Logpoint: rombo. Disattivato: grigio. Come GoLand/VS Code. */
+.monaco-editor .line-numbers.go-studio-bp-cond::after {
+  content: '?';
+  color: #fff;
+  font: 700 8px/11px var(--font-sans, sans-serif);
+  text-align: center;
+}
+.monaco-editor .line-numbers.go-studio-bp-log::after {
+  border-radius: 2px;
+  transform: rotate(45deg) scale(0.82);
+}
+.monaco-editor .line-numbers.go-studio-bp-pending.go-studio-bp-cond::after {
+  color: var(--color-danger, #ef4444);
+  line-height: 7px;
+}
+.monaco-editor .line-numbers.go-studio-bp-disabled::after {
+  background: var(--color-text-4, #4b5563);
+  box-shadow: none;
+  opacity: 0.8;
 }
 .monaco-editor .line-numbers:not(.go-studio-bp):hover::after {
   content: '';
@@ -141,44 +162,17 @@
 .go-studio-impl-up::before { content: 'I↑'; color: var(--color-accent, #8b5cf6); }
 .go-studio-impl-glyph:hover::before { filter: brightness(1.3); }
 
-/* Morph "aO → gO" all'ingresso in Go Studio (mock approvato): la "a" lascia il posto alla "g" in 400 ms. */
-.go-studio-mark-letter {
-  position: relative;
-  display: inline-block;
-  width: 1ch;
-  height: 1em;
-  overflow: hidden;
-  vertical-align: -0.12em;
-}
-.go-studio-mark-from,
-.go-studio-mark-to {
-  position: absolute;
-  inset: 0;
-  line-height: 1;
-}
-.go-studio-mark-from { animation: go-studio-mark-out 400ms ease-in forwards; }
-.go-studio-mark-to { animation: go-studio-mark-in 400ms ease-out forwards; }
-@keyframes go-studio-mark-out {
-  from { transform: translateY(0) rotateX(0); opacity: 1; }
-  to { transform: translateY(-70%) rotateX(80deg); opacity: 0; }
-}
-@keyframes go-studio-mark-in {
-  from { transform: translateY(70%) rotateX(-80deg); opacity: 0; }
-  to { transform: translateY(0) rotateX(0); opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .go-studio-mark-from { animation: none; opacity: 0; }
-  .go-studio-mark-to { animation: none; opacity: 1; }
-}
-
 /* Gutter VCS rispetto a HEAD, come GoLand: verde aggiunto, blu modificato, triangolo per le righe cancellate. */
 .monaco-editor .go-studio-vcs {
   cursor: pointer;
-  width: 3px !important;
-  margin-left: 0;
+  width: 2px !important;
+  margin-left: 2px;
+  transition: width 120ms ease;
 }
-.monaco-editor .go-studio-vcs-added { background: var(--color-success, #22c55e); }
-.monaco-editor .go-studio-vcs-modified { background: var(--color-info, #3b82f6); }
+/* Tinte smorzate come in IntelliJ; al passaggio la barra si allarga per far capire che è cliccabile. */
+.monaco-editor .go-studio-vcs:hover { width: 4px !important; }
+.monaco-editor .go-studio-vcs-added { background: color-mix(in srgb, var(--color-success, #22c55e) 60%, transparent); }
+.monaco-editor .go-studio-vcs-modified { background: color-mix(in srgb, var(--color-info, #3b82f6) 65%, transparent); }
 .monaco-editor .go-studio-vcs-deleted { background: transparent; }
 .monaco-editor .go-studio-vcs-deleted::after {
   content: '';
@@ -196,3 +190,12 @@
   font-style: italic;
   opacity: 0.85;
 }
+
+/* Toolbar come barra della finestra (JetBrains): si trascina dagli spazi vuoti, i controlli restano cliccabili. */
+.go-studio-titlebar { user-select: none; }
+.go-studio-titlebar button,
+.go-studio-titlebar input,
+.go-studio-titlebar select,
+.go-studio-titlebar a,
+.go-studio-titlebar [role="group"],
+.go-studio-titlebar [role="menu"] { --wails-draggable: no-drag; }

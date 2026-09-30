@@ -6,14 +6,16 @@ Everything stays on your machine. Nothing in a project runs until you trust it.
 
 ## Using Go Studio
 
-1. **Open a project** with *File → Open Project* (Ctrl+O), a recent project, or *New Go Project* (which runs `go mod init` after you confirm). A project may be a module, a `go.work` workspace, or a folder inside a larger repository.
-2. **Trust it.** A newly opened project is *opened* only: you can browse and edit files, but no tool runs. *Trust* (in the toolbar, or *Go → Trust Project Tools*) allows local Go tools for that project.
-3. **Pick a Go SDK.** Go Studio detects Go on `PATH`, or installs an official release from *Go → Go SDKs & Toolchains…*. Each project can use a different SDK.
+1. **Open a project** with *File → Open Project* (Ctrl+O), a recent project, or *New Go Project* (which runs `go mod init` after you confirm). New Go Project offers templates — empty module, CLI, REST service, gRPC service, worker, Kafka producer/consumer, library — plus your own templates: folders in `<user config dir>/adomnia/go-templates/`, where `__MODULE__`, `__NAME__` and `__PACKAGE__` are replaced in file contents and paths. The gRPC and Kafka templates run `go mod tidy`, pinned to the versions adOmnia itself uses, so they resolve from the module cache; if that fails (offline) the project is still created and a warning asks you to run Tidy. A project may be a module, a `go.work` workspace, or a folder inside a larger repository.
+2. **Trust it.** A newly opened project is *opened* only: you can browse and edit files, but no tool runs. The first time a folder is opened, a dialog asks whether to trust it; *Trust Folder* allows local Go tools and is remembered for that folder, so reopening it never asks again. *Browse Only* keeps tools off for the session; trust later with *Go → Trust Project Tools* (the same command revokes it).
+3. **Pick a Go SDK.** Go Studio detects Go on `PATH`, or installs an official release from *Go → Go SDKs & Toolchains…*. Each project can use a different SDK; click the Go version in the status bar to switch quickly. The toolchain dialog shows `GOROOT`, `GOPATH`, the module proxy/privacy settings and the target platform, and edits them for *This project* or as the *Global default* used by projects without their own settings: Go binary, `GOPROXY`, `GOPRIVATE`, `GONOPROXY`, `GONOSUMDB`, CGO, `GOOS`/`GOARCH`, build tags (written to `GOFLAGS` as `-tags=`) and other variables. It reads the `go` and `toolchain` directives of `go.mod` and warns when the selected SDK is older: with `GOTOOLCHAIN=local` the build would fail, otherwise `go` would download the newer toolchain. Its *Go tools* section health-checks gopls, the linter and Delve, and installs or updates them to `@latest`.
 4. **Write code.** gopls provides completion, diagnostics on unsaved buffers, hover, signature help, navigation (Ctrl+click or Ctrl+B for the declaration), usages, rename with preview, code actions and refactoring. golangci-lint or staticcheck add lint findings.
 5. **Run, test, debug.** Use Build, Run with stdin, the gutter ▶ next to `func main` and tests, the structured test runner with coverage, the Delve debugger (launch, attach or remote) and a real terminal. Makefile targets and Dockerfiles run for real too (see below).
-6. **Commit and integrate.** The toolbar shows the Git branch and changes, and the gutter shows diffs against HEAD. Commit from Go Studio; Git Studio follows the open project's repository for push, pull and merges. *Tools → Project Services* opens Docker Lab, Database Studio or Broker Studio for the services detected in `go.mod`. HTTP handlers get an *Open in API Client* CodeLens.
+6. **Commit and integrate.** The toolbar shows the Git branch and changes, and the gutter shows diffs against HEAD. Commit from Go Studio; Git Studio follows the open project's repository for push, pull and merges. *Tools → Project Services* opens Docker Lab, Database Studio or Broker Studio for the services detected in `go.mod`. HTTP handlers get an *Open in API Client* CodeLens. Package-level functions, methods, types, constants and variables show **Code Vision** above the declaration: the usage count from gopls (click it to list the usages) and the git author of the latest change, with `*` for uncommitted lines. The author is hidden while the buffer has unsaved changes, because blame describes the file on disk.
 
 *View → Maximize Editor* (Ctrl+Shift+F12, or a double-click on an editor tab) closes Project, Structure and the bottom tool window so the code takes all the space; press it again to bring them back exactly as they were. Every pane also closes on its own with its — button or its shortcut (Project Alt+1, Structure Alt+7, bottom tool window Alt+4).
+
+The status bar starts with the breadcrumb (file path › enclosing symbol; click a symbol to jump to its siblings) and shows line:column, the line separator (LF/CRLF), the language and the Go SDK. Save and Maximize editor sit at the right of the tab row. The top-right corner of the editor shows the problems of the open file: a green check when it is clean, otherwise error and warning counts with arrows for the previous and next problem (Shift+F8 / F8).
 
 *View → Maximize Go Studio* (Ctrl+Shift+F11, or the ⤢ button at the right of the toolbar) hides adOmnia's rail, the Go Studio header and adOmnia's status bar, so the IDE fills the window. Press it again to restore them; leaving Go Studio restores them too.
 
@@ -28,6 +30,9 @@ Several projects can stay open at the same time, isolated from each other, group
 - **Code → Type Hints:** the inferred types of `:=` and `range`, composite literal types and constant values, on top of parameter hints.
 - **File → Save Files on Focus Change:** saves modified files when adOmnia goes to the background or you switch file, never while you type.
 - **File → Trim Trailing Whitespace on Save** and **`.editorconfig`:** the project-root `.editorconfig` sets indentation, trailing whitespace and the final newline for non-Go files; Go, assembly and Makefiles keep tabs. Only the changed characters are edited, so the cursor stays and Ctrl+Z undoes it.
+- **Navigate:** Test (Alt+Shift+T) jumps between a file and its `_test.go` and between a function and its test, and offers to generate a missing test. Call Hierarchy (Ctrl+Alt+H) shows callers and callees, and Type Hierarchy shows supertypes and subtypes, as lazy trees with recursion marked. Recent Locations (Ctrl+Shift+E), Last Edit Location (Ctrl+Shift+Backspace) and Next/Previous Problem (F8 / Shift+F8) are also there.
+- **Code → Generate… (Alt+Insert):** Constructor, Getters and Setters (only for unexported fields), Extract Interface (exported methods), Test (gopls writes a table-driven test), Benchmark and Fuzz Test (added to the `_test.go` file, created when missing; missing imports are added on save). The generated code is inserted after the struct or function, and the rest of the file is untouched. Ctrl+Z undoes it.
+- **Code → Vulnerability Diagnostics** (off by default): after you confirm, gopls downloads the Go vulnerability database from vuln.go.dev and marks the `go.mod` requirements whose imported code has known vulnerabilities. Your source code is not sent.
 - **Replace in Files:** *Replace All… (preview)* in Find in Files opens every change in the change preview, applied all or nothing and undoable. With regular expressions, `$1`, `$2`… insert the captured groups.
 
 ## Security and project authorization
@@ -79,6 +84,26 @@ Go Studio runs Makefiles and Dockerfiles with the real `make` and `docker`, and 
   - *Docker build & run*: the same, plus published ports, volumes, container command and container environment.
 
   *Save as Run Configuration…* from a Dockerfile lists its `ARG`s as build args. Names that look sensitive (`password`, `token`, `secret`, `key`…) are marked secret: only the name is saved, and the value is asked once when you start. When an environment variable and a build arg share a name, one value serves both.
+- **Execution options.** Every run configuration also has: an *env file* (`.env` syntax, confined to the project; variables set in the configuration win), a *port* (exported as `PORT` and checked free before the start, so a busy port fails immediately instead of at bind time), and, for Go kinds, `GOOS`/`GOARCH`, the race detector (`-race`, with `CGO_ENABLED=1`) and coverage (`-cover`; for run and build the data goes to `.gocoverdata` through `GOCOVERDIR`). Test configurations add profiling (`cpu`, `mem`, `block`, `mutex` or `trace`, written next to the package). Package and build configurations add *debug build flags* passed to Delve, for example `-gcflags=all=-N`. The toolbar *Build* compiles a saved package/build configuration with all of these; secret variables are left out of builds.
+- **Before launch / after it finishes.** A configuration can run other configurations first (for example *Docker Compose up* or a *make* target) and afterwards (cleanup, reports). They run in order in the Run console. A failing task before launch stops the launch; tasks after it run whatever the exit code, unless you stopped the run; a failing task after it skips the rest. Only one level is followed: the tasks' own before/after lists are ignored.
+
+## Breakpoints
+
+A click on a line number toggles a breakpoint; a **right-click** opens its editor:
+
+- **Condition:** stops only when a Go expression is true (`len(items) > 10`). Delve evaluates it.
+- **Hit count:** `3` stops only on the third hit, `>= 5` from the fifth on, `% 10` every tenth.
+- **Log message (logpoint):** prints the message without stopping; `{expression}` is evaluated when the line runs and the text appears in the Debug console.
+- **Enabled:** a disabled breakpoint stays in place, grey, and is not sent to Delve.
+
+In the gutter a plain breakpoint is a red dot, one with a condition or hit count shows a `?`, a logpoint is a diamond, a disabled one is grey, and a hollow dot means Delve has not verified it yet (the tooltip says why). Options follow the line while you edit and are saved with the project; breakpoints saved by older versions (line numbers only) are read as plain breakpoints.
+
+**View Breakpoints (Ctrl+Shift+F8)** lists every breakpoint of the project: enable or disable each one (or all of them: *Run → Mute / Unmute Breakpoints*), edit its options, remove it, or double-click to open the line. The same dialog holds:
+
+- **Function breakpoints:** stop on entry to a function, e.g. `main.handler` or `(*Server).Serve`, with optional condition and hit count. Delve reports whether it found the function.
+- **Stop on every panic:** also stops on panics that are recovered later, by breaking in `runtime.gopanic`; the stack shows where the panic started. Unrecovered panics always stop the debugger.
+
+**Run to Cursor (Alt+F9)** resumes a paused program until the line with the caret, through a temporary breakpoint removed at the next stop, whatever the reason. On a line without code it says so and the program stays paused. *Set next statement* is not available: Delve does not support jumping over code through DAP.
 
 ## Concurrency-first debugger
 
@@ -112,6 +137,15 @@ pause and explains it.
   configuration) and the debug console become cards with both conflicting
   accesses and the goroutine creation stacks; every frame opens the
   source.
+- **Filters and grouping.** Filter goroutines by All, Blocked or Running or
+  by text, and group them by starting function or by identical stack.
+  Relation chips show channels, locks, WaitGroups, contexts, network,
+  database and timers.
+- **Evidence.** Diagnostics are OBSERVED (paused snapshot) or CONFIRMED
+  (race detector). A timeline shows goroutines per state at each pause, and
+  *Copy snapshot* exports goroutines, diagnostics and races as JSON.
+- **Run with Race Detector** runs the active configuration with `-race`.
+  Races are compared across runs: new, recurring or gone.
 - Goroutine states are inferred from the stack because DAP does not expose
   Go's wait reason. The analysis covers the first 1000 goroutines of a
   pause.
@@ -122,7 +156,7 @@ Go Studio stores metadata only. Source files stay where they are, and file conte
 
 | Key | Contents | Schema |
 | --- | --- | --- |
-| `state` | Open sessions (project path, authorization, Go Studio workspace), recent projects, run configurations (Go, Make and Docker) without secret values, per-session layout (open tabs, active file, panes, navigation history, bookmarks, breakpoints), Go Studio workspaces | `version` 4 |
+| `state` | Open sessions (project path, authorization, Go Studio workspace), recent projects, run configurations (Go, Make and Docker) without secret values, per-session layout (open tabs, active file, panes, navigation history, bookmarks, breakpoints), Go Studio workspaces, per-project and global toolchain settings (Go binary and variables; values with credentials in URLs are never written) | `version` 4 |
 | `recovery` | Unsaved buffers, kept so that a crash or restart does not lose them. Up to 200 buffers of 4 MB each. | `version` 1 |
 | `localHistory` | Previous versions of saved files: at most 20 per file, 2 MB per version, 32 MB in total, kept 14 days. `.env`, keys and certificates are never recorded. | `version` 1 |
 
@@ -243,6 +277,8 @@ Go Studio follows the GoLand keymap. The table below is generated from the comma
 | Stop | Shift+F5 | ⇧F5 |
 | Restart | Ctrl+Shift+F5 | ⌘⇧F5 |
 | Toggle Line Breakpoint | Ctrl+F8 | ⌘F8 |
+| View Breakpoints | Ctrl+Shift+F8 | ⌘⇧F8 |
+| Run to Cursor | Alt+F9 | ⌥F9 |
 | Resume Program | F9 (also F5 while paused) | F9 (also F5) |
 | Step Over | F8 (also F6, F10 while paused) | F8 (also F6, F10) |
 | Step Into | F7 | F7 |
@@ -255,7 +291,7 @@ Go Studio follows the GoLand keymap. The table below is generated from the comma
 | --- | --- | --- |
 | Commit | Ctrl+K | ⌘K |
 
-Other mouse gestures: Ctrl+click (Cmd+click on macOS) goes to the declaration, Alt+click adds a cursor, Shift+Alt+drag selects a column, and a click on a line number toggles a breakpoint.
+Other mouse gestures: Ctrl+click (Cmd+click on macOS) goes to the declaration, Alt+click adds a cursor, Shift+Alt+drag selects a column, a click on a line number toggles a breakpoint, and a right-click on a line number edits it (condition, hit count, logpoint).
 
 ## Platform verification
 
@@ -273,5 +309,14 @@ Other mouse gestures: Ctrl+click (Cmd+click on macOS) goes to the declaration, A
 - Plugins receive read-only Go Studio events (contract v1) and no commands.
 - HTTP route prefixes are resolved only within the same file for the *Open in API Client* CodeLens.
 - Remote debugging needs the same source paths on both sides for breakpoints to bind.
+- Set next statement is not available (Delve has no DAP `goto`); Run to Cursor covers moving forward.
 - Refactorings are the code actions gopls offers; nothing is simulated with text replacement.
 - Ctrl+click on an undefined symbol has no target; use *Fix with AI* or the gopls quick fixes.
+
+## Project tree, terminal and AI fixes
+
+- **Project tree context menu** (files, folders and the project root), in GoLand order: Open and Open in Split (right/down); New Go File / File / Folder; Cut (Ctrl+X), Copy (Ctrl+C) and Paste (Ctrl+V), which copy or move files and folders inside the project; Copy Path/Reference (absolute path Ctrl+Shift+C, path from project root Ctrl+Alt+Shift+C, file or folder name, Go import path); for Go files, Find Usages, Inspect Code, Refactor This, Move to New File, bookmarks, Reformat Code and Optimize Imports; Rename or move (Shift+F6 or F2; type a path with `/` to move), Duplicate, Delete (Delete key; always confirmed, and the text of deleted files is kept in Local History); **Reload from Disk** always re-reads a file and asks before discarding unsaved text, while **Refresh Folder / Project** re-reads the loaded tree branch and marks dirty tabs for Reload / Keep / Compare without discarding them; Find in Folder; Go Package (test, test with coverage, build, vet, go generate on the package of the folder or file), plus Run / Debug Current Configuration; Open In File Explorer or Terminal (a new terminal in that folder); Local History and Git (file history, blame) for files. Paste never overwrites: when the name is taken it picks `name_copy`. A cut item is dimmed until pasted. Operations stay inside the project; files with unsaved changes must be saved or discarded before moving them. On macOS, Cmd replaces Ctrl.
+- **Terminal profiles**: the arrow next to `+` lists the shells found on the machine — PowerShell 7, Windows PowerShell, Command Prompt, Git Bash and every WSL distribution (e.g. Ubuntu) on Windows; `$SHELL`, bash, zsh and fish on Linux/macOS. The chosen shell becomes the default for `+`. The UI can only start detected profiles, never an arbitrary executable.
+- **Resolve all with AI** (Problems pane, with an AI provider enabled in Settings → AI): one request per file with errors or warnings (up to 10 files), then a single change preview; nothing is written until you apply it. The file contents are sent to the configured provider.
+- **Code → everything**: CodeLens above SQL tables, broker topics, gRPC service registrations and WebSocket endpoints open them in Database Studio, Broker Studio, the gRPC client (with reflection) and the WebSocket client.
+- **Layout**: Go Studio opens maximized; the adOmnia logo in the top-left corner returns to the hub. The button next to Save maximizes the editor alone (Ctrl+Shift+F12).

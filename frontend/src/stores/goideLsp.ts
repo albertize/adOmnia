@@ -114,10 +114,16 @@ interface GoIDELspState {
   caretPopup: GoIDECaretPopup | null
   /** Call Hierarchy / Type Hierarchy aperta (una alla volta). */
   hierarchy: GoIDEHierarchyView | null
+  /** Menu Code → Generate… aperto accanto al cursore. */
+  generateMenu: { x: number; y: number } | null
   implementRequest: GoIDEImplementRequest | null
   renameRequest: { sessionId: string; documentId: string; line: number; column: number } | null
-  findRequest: { token: number; query: string } | null
-  requestFind: (query: string) => void
+  findRequest: { token: number; query: string; include?: string } | null
+  /** Apre Find in Files; include limita la ricerca, es. "internal/api/**" per Find in Folder. */
+  requestFind: (query: string, include?: string) => void
+  /** Nuovo terminale nella cartella indicata (relativa al progetto), da Open In → Terminal dell'albero. */
+  terminalRequest: { token: number; workingDirectory: string } | null
+  requestTerminal: (workingDirectory: string) => void
   detectGopls: (sessionId: string) => Promise<GoIDEGoplsInfo | null>
   ensureStarted: (sessionId: string) => Promise<void>
   start: (sessionId: string) => Promise<void>
@@ -143,7 +149,7 @@ interface PersistedSettings {
   preferences: GoIDEEditorPreferences
 }
 
-const DEFAULT_SETTINGS: GoIDELanguageServerSettings = { gofumpt: false, staticcheck: false, placeholders: true, semanticLinks: false }
+const DEFAULT_SETTINGS: GoIDELanguageServerSettings = { gofumpt: false, staticcheck: false, placeholders: true, semanticLinks: false, vulncheck: false }
 const DEFAULT_PREFERENCES: GoIDEEditorPreferences = {
   formatOnSave: true, organizeImportsOnSave: true, lintOnSave: false, semanticHighlighting: true, inlayHints: true,
   typeHints: false, stickyScroll: true, minimap: false, fontLigatures: false, fontSize: EDITOR_FONT_SIZE.default,
@@ -197,13 +203,20 @@ export const useGoIDELspStore = create<GoIDELspState>((set, get) => ({
   pendingChangeOnCancel: null,
   caretPopup: null,
   hierarchy: null,
+  generateMenu: null,
   implementRequest: null,
   renameRequest: null,
   findRequest: null,
+  terminalRequest: null,
 
-  requestFind: (query) => {
-    set((state) => ({ findRequest: { token: (state.findRequest?.token ?? 0) + 1, query } }))
+  requestFind: (query, include) => {
+    set((state) => ({ findRequest: { token: (state.findRequest?.token ?? 0) + 1, query, include } }))
     get().showToolWindow('find')
+  },
+
+  requestTerminal: (workingDirectory) => {
+    set((state) => ({ terminalRequest: { token: (state.terminalRequest?.token ?? 0) + 1, workingDirectory } }))
+    get().showToolWindow('terminal')
   },
 
   detectGopls: async (sessionId) => {

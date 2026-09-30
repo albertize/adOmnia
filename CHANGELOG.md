@@ -6,8 +6,61 @@ This project follows a pragmatic release log format inspired by Keep a Changelog
 
 ## [Unreleased]
 
+## [0.9.48] - 2026-09-30
+
 ### Added
+- **Go Studio Project refresh:** *Reload from Disk* always reads the selected
+  file again and asks before discarding unsaved text. *Refresh Folder* and
+  *Refresh Project* reload the cached tree branch while preserving dirty tabs
+  for Reload / Keep / Compare.
+- **IDE-grade Project context actions:** Go files now expose Find Usages,
+  Inspect Code, Refactor This, Move to New File, Bookmarks, Reformat, Optimize
+  Imports, Run and Debug from the project tree; folders and non-Go files retain
+  only actions that apply to them.
+
+### Changed
+- **gO rail entry:** the Go Studio launcher uses a compact, transparent cyan
+  gO mark and retains the focused left-side active indicator instead of adding
+  an intrusive tile around the icon.
+- **README:** the Go Studio section now introduces the current IDE screenshot,
+  showing the project view, editor actions and Run console in the local desktop
+  workspace.
+
+### Removed
+- **Brick Workshop skin:** the LEGO-inspired theme, Hub artwork, settings
+  entries, translations, built-in theme metadata and obsolete release mentions
+  have been removed completely. Existing users fall back to the normal theme
+  choices without a workspace migration.
+
+### Verified
+- 17 focused frontend tests covering the compact rail, the Project context menu
+  and Go Studio disk refresh pass.
+- TypeScript, the production frontend build, `go test ./...` and the Windows
+  Wails `build.ps1 -Version 0.9.48` pipeline pass.
+- Browser smoke check: the compact gO rail entry is visible in the Hub and
+  opens Go Studio directly.
+
+Full release notes: [v0.9.48](docs/releases/v0.9.48.md).
+
+## [0.9.42] - 2026-09-29
+
+### Fixed
+- Go sources and test fixtures stay LF on Windows (`.gitattributes`), which fixes a Go Studio refactoring test that failed on Windows whenever gopls was installed.
+
+### Added
+- **Concurrency View (Go Studio debugger):** goroutine filters and grouping by identical stack; relation chips (channel, mutex/RWMutex, WaitGroup, context, network, database, timer); new diagnostics for channels without consumer or producer, RWMutex contention, a WaitGroup that can never reach zero and excessive goroutine counts; OBSERVED / CONFIRMED evidence badges; a goroutine timeline across pauses; copy snapshot as JSON.
+- **Race Detector UX:** *Run with Race Detector* for the active run configuration; races compared across runs (new, recurring, gone), duplicates counted, accesses marked earlier and later.
+- **Project tree decorations:** file names coloured by Git status, gopls errors and warnings underlined, a dot on files with failed tests; folders inherit the most important mark. Kubernetes, SQL, proto and script icons.
+- **go.work management and Clone Repository** in Go Studio, with a hardened `git clone`.
+- **Vulnerability diagnostics in Go Studio:** opt-in (Code menu, with confirmation), gopls marks vulnerable `go.mod` requirements using the Go vulnerability database.
+- **Go Studio navigation and generation:** Call Hierarchy (Ctrl+Alt+H) and Type Hierarchy, Go to Test (Alt+Shift+T) with test generation, Recent Locations (Ctrl+Shift+E), Last Edit Location (Ctrl+Shift+Backspace), Next/Previous Problem (F8), and Code → Generate… (Alt+Insert): constructor, getters, setters, extract interface, table-driven test, benchmark and fuzz test.
 - **Go Studio editor core:** Sticky Scopes, optional Minimap, Font Ligatures, Zoom (Ctrl+= / Ctrl+- / Ctrl+0), Zen Mode (Alt+Shift+Z), Preview Tab, Type Hints, Save Files on Focus Change, Trim Trailing Whitespace on Save, project-root `.editorconfig` support and Replace in Files through the change preview.
+
+### Verified
+- Go Studio Go tests pass; 791 frontend tests across 175 files, TypeScript, the production build and the startup budget pass.
+- The debugger and Concurrency View need a manual check with a real Delve session and blocked goroutines.
+
+Full release notes: [v0.9.42](docs/releases/v0.9.42.md).
 
 ## [0.9.41] - 2026-09-29
 

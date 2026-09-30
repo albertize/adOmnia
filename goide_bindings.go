@@ -283,9 +283,14 @@ func (g *GoIDE) OpenProject(path string) (goide.Session, error) {
 	return g.service.OpenProject(path)
 }
 
-// CreateProject crea un modulo Go soltanto dopo la conferma esplicita inclusa nella richiesta.
-func (g *GoIDE) CreateProject(request goide.CreateProjectRequest) (goide.Session, error) {
+// CreateProject crea un modulo Go (opzionalmente da template) soltanto dopo la conferma esplicita inclusa nella richiesta.
+func (g *GoIDE) CreateProject(request goide.CreateProjectRequest) (goide.CreateProjectResult, error) {
 	return g.service.CreateProject(request)
+}
+
+// ListProjectTemplates restituisce i template di progetto integrati e quelli dell'utente.
+func (g *GoIDE) ListProjectTemplates() (goide.ProjectTemplateList, error) {
+	return g.service.ListProjectTemplates()
 }
 
 // ListSessions restituisce le sessioni Go Studio correnti e ripristinate.
@@ -351,6 +356,26 @@ func (g *GoIDE) DetectToolchain(sessionID string) (goide.ToolchainInfo, error) {
 // ConfigureToolchain imposta binario e variabili della sessione dopo validazione.
 func (g *GoIDE) ConfigureToolchain(sessionID string, config goide.ToolchainConfiguration) error {
 	return g.service.ConfigureToolchain(sessionID, config)
+}
+
+// StartConfiguredBuild compila una configurazione con tutti i suoi parametri.
+func (g *GoIDE) StartConfiguredBuild(sessionID, configID string) (goide.Execution, error) {
+	return g.service.StartConfiguredBuild(sessionID, configID)
+}
+
+// ToolchainSettings restituisce la toolchain del progetto e quella globale.
+func (g *GoIDE) ToolchainSettings(sessionID string) (goide.ToolchainSettings, error) {
+	return g.service.ToolchainSettings(sessionID)
+}
+
+// ConfigureGlobalToolchain imposta la toolchain predefinita dei progetti.
+func (g *GoIDE) ConfigureGlobalToolchain(config goide.ToolchainConfiguration) error {
+	return g.service.ConfigureGlobalToolchain(config)
+}
+
+// UseGlobalToolchain riporta il progetto alla toolchain globale.
+func (g *GoIDE) UseGlobalToolchain(sessionID string) error {
+	return g.service.UseGlobalToolchain(sessionID)
 }
 
 // ListToolchainReleases restituisce il catalogo ufficiale compatibile su richiesta esplicita.
@@ -488,9 +513,24 @@ func (g *GoIDE) ListDebugSessions(sessionID string) ([]goide.DebugSessionInfo, e
 	return g.service.ListDebugSessions(sessionID)
 }
 
-// SetBreakpoints sostituisce i breakpoint di un file e li applica alle sessioni attive.
-func (g *GoIDE) SetBreakpoints(sessionID, relativePath string, lines []int) ([]goide.BreakpointState, error) {
-	return g.service.SetBreakpoints(sessionID, relativePath, lines)
+// SetBreakpoints sostituisce i breakpoint di un file (con condizione, hit count o logpoint) e li applica alle sessioni attive.
+func (g *GoIDE) SetBreakpoints(sessionID, relativePath string, breakpoints []goide.Breakpoint) ([]goide.BreakpointState, error) {
+	return g.service.SetBreakpoints(sessionID, relativePath, breakpoints)
+}
+
+// ListFunctionBreakpoints restituisce i breakpoint di funzione e il panic breakpoint del progetto.
+func (g *GoIDE) ListFunctionBreakpoints(sessionID string) (goide.FunctionBreakpointsView, error) {
+	return g.service.ListFunctionBreakpoints(sessionID)
+}
+
+// SetFunctionBreakpoints sostituisce i breakpoint di funzione e il panic breakpoint del progetto.
+func (g *GoIDE) SetFunctionBreakpoints(sessionID string, settings goide.FunctionBreakpointSettings) (goide.FunctionBreakpointsView, error) {
+	return g.service.SetFunctionBreakpoints(sessionID, settings)
+}
+
+// DebugRunToCursor riprende il programma in pausa fino alla riga indicata.
+func (g *GoIDE) DebugRunToCursor(debugID, relativePath string, line, threadID int) error {
+	return g.service.DebugRunToCursor(debugID, relativePath, line, threadID)
 }
 
 // ListBreakpoints restituisce i breakpoint salvati della sessione.
@@ -501,6 +541,31 @@ func (g *GoIDE) ListBreakpoints(sessionID string) ([]goide.FileBreakpoints, erro
 // CreateFiles crea file nuovi nel progetto, tutti o nessuno.
 func (g *GoIDE) CreateFiles(sessionID string, files []goide.NewFile) error {
 	return g.service.CreateFiles(sessionID, files)
+}
+
+// CreateDirectory crea una cartella nel progetto.
+func (g *GoIDE) CreateDirectory(sessionID, relativePath string) error {
+	return g.service.CreateDirectory(sessionID, relativePath)
+}
+
+// MovePath rinomina o sposta un file o una cartella del progetto, senza sovrascrivere.
+func (g *GoIDE) MovePath(sessionID, from, to string) error {
+	return g.service.MovePath(sessionID, from, to)
+}
+
+// DuplicatePath copia un file o una cartella del progetto in un nuovo percorso.
+func (g *GoIDE) DuplicatePath(sessionID, from, to string) error {
+	return g.service.DuplicatePath(sessionID, from, to)
+}
+
+// RevealPath mostra un elemento del progetto nel file manager del sistema.
+func (g *GoIDE) RevealPath(sessionID, relativePath string) error {
+	return g.service.RevealPath(sessionID, relativePath)
+}
+
+// DeletePath elimina un file o una cartella del progetto dopo la conferma nella UI.
+func (g *GoIDE) DeletePath(sessionID, relativePath string) error {
+	return g.service.DeletePath(sessionID, relativePath)
 }
 
 // ImplementationMarkers restituisce i marcatori del gutter per implementazioni e interfacce implementate.
@@ -671,6 +736,33 @@ func (g *GoIDE) InlayHints(ctx context.Context, sessionID, documentID string, vi
 func (g *GoIDE) DocumentHighlights(ctx context.Context, sessionID, documentID string, line, column int) (goide.HighlightsResult, error) {
 	value, err := g.service.DocumentHighlights(ctx, sessionID, documentID, line, column)
 	return settleCancelled(ctx, value, err)
+}
+
+// GoWorkState legge go.work e i moduli rilevati del progetto.
+func (g *GoIDE) GoWorkState(sessionID string) (goide.GoWorkState, error) {
+	return g.service.GoWorkState(sessionID)
+}
+
+// UpdateGoWork porta go.work all'insieme di moduli indicato con i comandi go work ufficiali.
+func (g *GoIDE) UpdateGoWork(sessionID string, directories []string) (goide.GoWorkState, error) {
+	return g.service.UpdateGoWork(sessionID, directories)
+}
+
+// CloneRepository clona un repository Git in parent/<nome> e restituisce la cartella, da aprire come progetto.
+func (g *GoIDE) CloneRepository(remoteURL, parent string) (string, error) {
+	destination, err := goide.CloneDestination(parent, remoteURL)
+	if err != nil {
+		return "", err
+	}
+	if err := git.Clone(remoteURL, destination); err != nil {
+		return "", err
+	}
+	return destination, nil
+}
+
+// GenerateGoCode genera costruttore, getter/setter, interfaccia, benchmark o fuzz test sul testo indicato.
+func (g *GoIDE) GenerateGoCode(request goide.CodeGenRequest) (goide.CodeGenResult, error) {
+	return goide.GenerateGoCode(request)
 }
 
 // PrepareHierarchy apre Call Hierarchy o Type Hierarchy sul simbolo al cursore.
@@ -901,6 +993,11 @@ func (g *GoIDE) DeleteRunConfiguration(sessionID, configID string) error {
 // StartConfiguredRun avvia una configurazione salvata con i soli segreti forniti a runtime.
 func (g *GoIDE) StartConfiguredRun(sessionID, configID string, secrets map[string]string) (goide.Execution, error) {
 	return g.service.StartConfiguredRun(sessionID, configID, secrets)
+}
+
+// ListTerminalProfiles rileva le shell disponibili (PowerShell, cmd, Git Bash, distro WSL, zsh…).
+func (g *GoIDE) ListTerminalProfiles() []goide.TerminalProfile {
+	return goide.ListTerminalProfiles()
 }
 
 // OpenTerminal apre una shell interattiva reale nella working directory del progetto.

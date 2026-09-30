@@ -1,5 +1,5 @@
 export type GoStudioCommandId =
-  | 'file.openProject' | 'file.newProject' | 'file.save' | 'file.saveAll' | 'file.closeEditor' | 'file.closeProject'
+  | 'file.openProject' | 'file.newProject' | 'file.clone' | 'go.goWork' | 'file.save' | 'file.saveAll' | 'file.closeEditor' | 'file.closeProject'
   | 'window.openInNewWindow' | 'window.moveBack'
   | 'file.closeOthers' | 'file.closeAll' | 'file.pinTab' | 'file.reopenClosed' | 'file.autoSave' | 'file.trimWhitespace'
   | 'edit.undo' | 'edit.redo' | 'edit.find' | 'edit.replace' | 'edit.gotoLine' | 'edit.toggleComment'
@@ -9,22 +9,23 @@ export type GoStudioCommandId =
   | 'view.zoomIn' | 'view.zoomOut' | 'view.zoomReset' | 'view.zenMode' | 'view.stickyScroll' | 'view.minimap' | 'view.fontLigatures' | 'view.previewTab'
   | 'view.quickOpen' | 'view.maximize' | 'view.maximizeEditor' | 'view.toggleProject' | 'view.toggleStructure' | 'view.toggleBottom' | 'view.toggleIgnored' | 'view.problems'
   | 'nav.declaration' | 'nav.typeDeclaration' | 'nav.implementation' | 'nav.usages' | 'nav.fileStructure' | 'nav.symbol' | 'nav.findInFiles'
-  | 'nav.callHierarchy' | 'nav.typeHierarchy' | 'nav.nextProblem' | 'nav.previousProblem'
+  | 'nav.recentLocations' | 'nav.lastEdit' | 'nav.gotoTest' | 'code.generate' | 'nav.callHierarchy' | 'nav.typeHierarchy' | 'nav.nextProblem' | 'nav.previousProblem'
   | 'nav.superMethod' | 'nav.back' | 'nav.forward' | 'nav.toggleBookmark' | 'nav.bookmarks'
   | 'nav.quickDefinition' | 'nav.showUsages' | 'nav.searchEverywhere' | 'code.quickDocumentation' | 'code.typeInfo' | 'code.semanticHighlighting' | 'code.inlayHints' | 'code.typeHints' | 'code.implementInterface'
   | 'code.refactorThis' | 'code.extractVariable' | 'code.extractConstant' | 'code.extractFunction' | 'code.inline' | 'code.moveToNewFile'
   | 'code.completion' | 'code.parameterInfo' | 'code.quickFix' | 'code.rename' | 'code.reformat' | 'code.organizeImports'
-  | 'code.formatOnSave' | 'code.importsOnSave' | 'code.gofumpt' | 'code.staticcheck' | 'code.lint' | 'code.lintOnSave'
+  | 'code.formatOnSave' | 'code.importsOnSave' | 'code.gofumpt' | 'code.staticcheck' | 'code.vulncheck' | 'code.lint' | 'code.lintOnSave'
   | 'go.toolchains' | 'go.detect' | 'go.dependencies' | 'go.tidy' | 'go.trust'
   | 'go.updateAll' | 'go.updatePatch' | 'go.modDownload' | 'go.modVerify'
   | 'go.lspStart' | 'go.lspRestart' | 'go.lspStop' | 'go.lspInstall' | 'go.lspLog'
   | 'go.toolVet' | 'go.toolGenerate' | 'go.toolFix' | 'go.toolModWhy' | 'go.toolModGraph' | 'go.toolDoc'
   | 'go.installGolangci' | 'go.installStaticcheck' | 'go.toolPaths'
   | 'run.run' | 'run.build' | 'run.stop' | 'run.restart' | 'run.configure'
-  | 'run.rerunFailedTests' | 'run.testCoverage' | 'run.testRace' | 'view.tests'
+  | 'run.rerunFailedTests' | 'run.testCoverage' | 'run.testRace' | 'run.runRace' | 'view.tests'
   | 'run.buildPackage' | 'run.testPackage' | 'run.vetPackage' | 'run.buildAll' | 'run.testAll' | 'run.vetAll' | 'run.generateAll' | 'run.install'
   | 'debug.debug' | 'debug.toggleBreakpoint' | 'debug.resume' | 'debug.pause' | 'debug.stepOver' | 'debug.stepInto' | 'debug.stepOut'
   | 'debug.stop' | 'view.debug' | 'go.installDelve' | 'debug.attach' | 'debug.remote'
+  | 'debug.viewBreakpoints' | 'debug.runToCursor' | 'debug.muteBreakpoints'
   | 'vcs.commit' | 'vcs.history' | 'vcs.annotate' | 'vcs.gitStudio'
   | 'tools.services' | 'tools.httpRequest' | 'tools.plugins'
   | 'help.shortcuts'
@@ -68,6 +69,7 @@ export const GO_STUDIO_MENUS: ReadonlyArray<{ id: GoStudioMenuId; label: string 
 export const GO_STUDIO_COMMANDS: ReadonlyArray<GoStudioCommand> = [
   { id: 'file.openProject', menu: 'file', label: 'Open Project…', binding: { key: 'o', mod: true } },
   { id: 'file.newProject', menu: 'file', label: 'New Go Project…' },
+  { id: 'file.clone', menu: 'file', label: 'Clone Repository…' },
   { id: 'file.save', menu: 'file', label: 'Save', binding: { key: 's', mod: true }, separatorBefore: true },
   { id: 'file.saveAll', menu: 'file', label: 'Save All', binding: { key: 's', mod: true, shift: true } },
   { id: 'file.autoSave', menu: 'file', label: 'Save Files on Focus Change' },
@@ -123,6 +125,9 @@ export const GO_STUDIO_COMMANDS: ReadonlyArray<GoStudioCommand> = [
   { id: 'nav.implementation', menu: 'navigate', label: 'Implementation(s)', binding: { key: 'b', mod: true, alt: true }, editorOwned: true },
   { id: 'nav.superMethod', menu: 'navigate', label: 'Super Method', binding: { key: 'u', mod: true }, editorOwned: true },
   { id: 'nav.usages', menu: 'navigate', label: 'Find Usages', binding: { key: 'F7', alt: true }, editorOwned: true },
+  { id: 'nav.recentLocations', menu: 'navigate', label: 'Recent Locations…', binding: { key: 'e', mod: true, shift: true } },
+  { id: 'nav.lastEdit', menu: 'navigate', label: 'Last Edit Location', binding: { key: 'Backspace', mod: true, shift: true } },
+  { id: 'nav.gotoTest', menu: 'navigate', label: 'Test', binding: { key: 't', alt: true, shift: true }, editorOwned: true },
   { id: 'nav.callHierarchy', menu: 'navigate', label: 'Call Hierarchy', binding: { key: 'h', mod: true, alt: true }, editorOwned: true },
   { id: 'nav.typeHierarchy', menu: 'navigate', label: 'Type Hierarchy' },
   { id: 'nav.nextProblem', menu: 'navigate', label: 'Next Problem', binding: { key: 'F8' }, editorOwned: true, separatorBefore: true },
@@ -142,6 +147,7 @@ export const GO_STUDIO_COMMANDS: ReadonlyArray<GoStudioCommand> = [
   { id: 'code.typeInfo', menu: 'code', label: 'Type Info', binding: { key: 'p', mod: true, shift: true }, editorOwned: true },
   { id: 'code.quickFix', menu: 'code', label: 'Show Context Actions', binding: { key: 'Enter', alt: true }, editorOwned: true, separatorBefore: true },
   { id: 'code.implementInterface', menu: 'code', label: 'Implement Interface…', binding: { key: 'i', mod: true }, editorOwned: true },
+  { id: 'code.generate', menu: 'code', label: 'Generate…', binding: { key: 'Insert', alt: true }, editorOwned: true, separatorBefore: true },
   { id: 'code.rename', menu: 'code', label: 'Rename…', binding: { key: 'F6', shift: true }, editorOwned: true },
   { id: 'code.refactorThis', menu: 'code', label: 'Refactor This…', binding: { key: 't', mod: true, alt: true, shift: true }, editorOwned: true, separatorBefore: true },
   { id: 'code.extractVariable', menu: 'code', label: 'Extract Variable', binding: { key: 'v', mod: true, alt: true }, editorOwned: true },
@@ -160,9 +166,11 @@ export const GO_STUDIO_COMMANDS: ReadonlyArray<GoStudioCommand> = [
   { id: 'code.typeHints', menu: 'code', label: 'Type Hints (:=, range, literals, constants)' },
   { id: 'code.gofumpt', menu: 'code', label: 'Use gofumpt Style' },
   { id: 'code.staticcheck', menu: 'code', label: 'Staticcheck Analyses' },
+  { id: 'code.vulncheck', menu: 'code', label: 'Vulnerability Diagnostics (vuln.go.dev)' },
   { id: 'go.toolchains', menu: 'go', label: 'Go SDKs & Toolchains…' },
   { id: 'go.detect', menu: 'go', label: 'Detect Go SDK' },
   { id: 'go.dependencies', menu: 'go', label: 'Module Dependencies…', separatorBefore: true },
+  { id: 'go.goWork', menu: 'go', label: 'Go Workspace (go.work)…' },
   { id: 'go.tidy', menu: 'go', label: 'go mod tidy…' },
   { id: 'go.updateAll', menu: 'go', label: 'Update All Dependencies…' },
   { id: 'go.updatePatch', menu: 'go', label: 'Update Patch Versions…' },
@@ -194,6 +202,7 @@ export const GO_STUDIO_COMMANDS: ReadonlyArray<GoStudioCommand> = [
   { id: 'run.vetPackage', menu: 'run', label: 'Vet Current Package' },
   { id: 'run.testCoverage', menu: 'run', label: 'Test Current Package with Coverage' },
   { id: 'run.testRace', menu: 'run', label: 'Test Current Package with Race Detector' },
+  { id: 'run.runRace', menu: 'run', label: 'Run with Race Detector' },
   { id: 'run.rerunFailedTests', menu: 'run', label: 'Rerun Failed Tests', binding: { key: 'F10', mod: true, shift: true, alt: true } },
   { id: 'run.buildAll', menu: 'run', label: 'Build All (go build ./...)', binding: { key: 'F9', mod: true, shift: true }, separatorBefore: true },
   { id: 'run.testAll', menu: 'run', label: 'Test All (go test ./...)', binding: { key: 'F10', mod: true, alt: true } },
@@ -203,11 +212,14 @@ export const GO_STUDIO_COMMANDS: ReadonlyArray<GoStudioCommand> = [
   { id: 'run.stop', menu: 'run', label: 'Stop', binding: { key: 'F5', shift: true }, separatorBefore: true },
   { id: 'run.restart', menu: 'run', label: 'Restart', binding: { key: 'F5', mod: true, shift: true } },
   { id: 'debug.toggleBreakpoint', menu: 'run', label: 'Toggle Line Breakpoint', binding: { key: 'F8', mod: true }, separatorBefore: true },
+  { id: 'debug.viewBreakpoints', menu: 'run', label: 'View Breakpoints…', binding: { key: 'F8', mod: true, shift: true } },
+  { id: 'debug.muteBreakpoints', menu: 'run', label: 'Mute / Unmute Breakpoints' },
   { id: 'debug.resume', menu: 'run', label: 'Resume Program', binding: { key: 'F9' }, altBindings: [{ key: 'F5' }], passThroughWhenUnavailable: true },
   { id: 'debug.pause', menu: 'run', label: 'Pause Program', passThroughWhenUnavailable: true },
   { id: 'debug.stepOver', menu: 'run', label: 'Step Over', binding: { key: 'F8' }, altBindings: [{ key: 'F6' }, { key: 'F10' }], passThroughWhenUnavailable: true },
   { id: 'debug.stepInto', menu: 'run', label: 'Step Into', binding: { key: 'F7' }, passThroughWhenUnavailable: true },
   { id: 'debug.stepOut', menu: 'run', label: 'Step Out', binding: { key: 'F8', shift: true }, passThroughWhenUnavailable: true },
+  { id: 'debug.runToCursor', menu: 'run', label: 'Run to Cursor', binding: { key: 'F9', alt: true }, passThroughWhenUnavailable: true },
   { id: 'debug.stop', menu: 'run', label: 'Stop Debugging', binding: { key: 'F2', mod: true }, passThroughWhenUnavailable: true },
   { id: 'run.configure', menu: 'run', label: 'Edit Run Configuration…', separatorBefore: true },
   { id: 'tools.services', menu: 'tools', label: 'Project Services: Docker Lab, Database, Broker…' },
@@ -274,6 +286,7 @@ export interface GoStudioCommandContext {
   importsOnSave: boolean
   gofumpt: boolean
   staticcheck: boolean
+  vulncheck?: boolean
   lintOnSave: boolean
   linterAvailable: boolean
   linting: boolean
@@ -348,7 +361,7 @@ export function commandAvailability(id: GoStudioCommandId, context: GoStudioComm
   if (windowed !== null) return windowed
   if (id === 'view.maximize') return context.detached ? 'Already a separate window' : true
   if (id === 'view.zenMode') return context.detached ? 'Available in the main window' : true
-  if (id === 'file.openProject' || id === 'file.newProject' || id === 'help.shortcuts') return true
+  if (id === 'file.openProject' || id === 'file.newProject' || id === 'file.clone' || id === 'help.shortcuts') return true
   if (!context.hasSession) return NO_PROJECT
   if (id.startsWith('edit.')) return context.hasEditor ? true : 'Open a file first'
   switch (id) {
@@ -364,7 +377,7 @@ export function commandAvailability(id: GoStudioCommandId, context: GoStudioComm
   }
   if (id === 'code.typeHints') return context.inlayHints ? true : 'Turn on Inlay Hints first'
   if (id === 'code.semanticHighlighting' || id === 'code.inlayHints') return context.lspState === 'ready' && !context[id === 'code.inlayHints' ? 'inlayHintsSupported' : 'semanticTokensSupported'] ? 'The running gopls does not provide this feature' : true
-  if (id.startsWith('code.') && ['code.formatOnSave', 'code.importsOnSave', 'code.gofumpt', 'code.staticcheck', 'code.lintOnSave'].indexOf(id) < 0) return semanticAvailability(context)
+  if (id.startsWith('code.') && ['code.formatOnSave', 'code.importsOnSave', 'code.gofumpt', 'code.staticcheck', 'code.vulncheck', 'code.lintOnSave'].indexOf(id) < 0) return semanticAvailability(context)
   switch (id) {
     case 'file.save': return context.activeDocumentDirty ? true : 'No unsaved changes in this file'
     case 'file.saveAll': return context.sessionDirty ? true : 'No unsaved changes'
@@ -396,6 +409,7 @@ export function commandAvailability(id: GoStudioCommandId, context: GoStudioComm
     case 'run.install':
     case 'run.testCoverage':
     case 'run.testRace':
+    case 'run.runRace':
     case 'run.rerunFailedTests':
     case 'go.modVerify':
     case 'go.toolVet':
@@ -413,6 +427,9 @@ export function commandAvailability(id: GoStudioCommandId, context: GoStudioComm
     case 'go.installDelve': return runAvailability(context)
     case 'debug.remote': return context.authorized ? true : NOT_TRUSTED
     case 'debug.toggleBreakpoint': return context.hasEditor ? true : 'Open a Go file first'
+    case 'debug.viewBreakpoints':
+    case 'debug.muteBreakpoints': return true
+    case 'debug.runToCursor': return context.debugState !== 'stopped' ? 'The debugger is not paused' : context.hasEditor ? true : 'Open a Go file first'
     case 'debug.resume':
     case 'debug.stepOver':
     case 'debug.stepInto':
@@ -456,6 +473,7 @@ export function commandChecked(id: GoStudioCommandId, context: GoStudioCommandCo
     case 'code.importsOnSave': return context.importsOnSave
     case 'code.gofumpt': return context.gofumpt
     case 'code.staticcheck': return context.staticcheck
+    case 'code.vulncheck': return !!context.vulncheck
     case 'code.lintOnSave': return context.lintOnSave
     case 'code.semanticHighlighting': return context.semanticHighlighting
     case 'code.inlayHints': return context.inlayHints
